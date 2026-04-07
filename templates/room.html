@@ -23,7 +23,11 @@
         </div>
         <div class="video-wrapper">
             <video id="watchVideo" class="video-js vjs-big-play-centered vjs-theme-prime" 
-                   poster="https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?q=80&w=2070&auto=format&fit=crop"
+                   {% if room.video.poster_filename %}
+                   poster="{{ url_for('static', filename='uploads/' + room.video.poster_filename) }}"
+                   {% else %}
+                   poster="{{ url_for('static', filename='images/hero_bg.png') }}"
+                   {% endif %}
                    controls preload="auto" width="100%" height="100%" crossorigin="anonymous">
                 <source src="{{ url_for('static', filename='uploads/' + room.video.filename) }}">
                 Your browser does not support the video tag.
@@ -87,7 +91,11 @@
 <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
 <script>
     const ROOM_ID = "{{ room.id }}";
-    const USERNAME = "User_" + Math.floor(Math.random() * 1000); // Random username
+    {% if user %}
+    const USERNAME = "{{ user.username }}";
+    {% else %}
+    const USERNAME = "Guest_" + Math.floor(Math.random() * 1000);
+    {% endif %}
 </script>
 <script src="{{ url_for('static', filename='js/room.js') }}"></script>
 {% endblock %}

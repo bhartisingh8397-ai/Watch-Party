@@ -1,5 +1,6 @@
 import os
 import uuid
+from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from models import db, Video, Room, User
@@ -11,11 +12,16 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///watchparty_v2.db'
 app.config['UPLOAD_FOLDER'] = os.path.join('static', 'uploads')
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2GB Limit
 
-ALLOWED_EXTENSIONS = {'mp4', 'mkv', 'avi', 'mov', 'webm', 'wmv', 'flv', 'm4v'}
+ALLOWED_VIDEO_EXTENSIONS = {'mp4', 'mkv', 'avi', 'mov', 'webm', 'wmv', 'flv', 'm4v'}
+ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'}
 
-def allowed_file(filename):
+def allowed_video(filename):
     return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_VIDEO_EXTENSIONS
+
+def allowed_image(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_IMAGE_EXTENSIONS
 
 db.init_app(app)
 socketio = SocketIO(app, cors_allowed_origins="*")
@@ -25,6 +31,16 @@ def get_current_user():
     if user_id:
         return User.query.get(user_id)
     return None
+
+def login_required(f):
+    """Decorator to require user login for a route."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not get_current_user():
+            flash('Please login to access this feature.')
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
 
 # Simple Admin credentials
 ADMIN_PASS = "admin123"
@@ -41,17 +57,24 @@ def index():
     return render_template('index.html', rooms=rooms, videos=videos, user=get_current_user())
 
 @app.route('/create_room', methods=['POST'])
+@login_required
 def create_room():
     room_name = request.form.get('room_name')
     video_id = request.form.get('video_id')
-    room_id = str(uuid.uuid4())[:8]  # Short room ID
     
+    # Check if an active room already exists for this video — prevent duplicates
+    existing_room = Room.query.filter_by(video_id=video_id).first()
+    if existing_room:
+        return redirect(url_for('room', room_id=existing_room.id))
+    
+    room_id = str(uuid.uuid4())[:8]  # Short room ID
     new_room = Room(id=room_id, name=room_name, video_id=video_id)
     db.session.add(new_room)
     db.session.commit()
     return redirect(url_for('room', room_id=room_id))
 
 @app.route('/room/<room_id>')
+@login_required
 def room(room_id):
     room_obj = Room.query.get_or_404(room_id)
     return render_template('room.html', room=room_obj, user=get_current_user())
@@ -65,6 +88,12 @@ def admin_login():
             return redirect(url_for('admin'))
         flash('Invalid Password')
     return render_template('admin_login.html', user=get_current_user())
+
+@app.route('/admin/logout')
+def admin_logout():
+    session.pop('is_admin', None)
+    flash('Admin logged out successfully!')
+    return redirect(url_for('index'))
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
@@ -108,9 +137,7 @@ def logout():
 @app.route('/movies')
 def movies():
     videos = Video.query.all()
-    # Provide professional default posters for older uploads
-    default_poster = "https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?q=80&w=2070&auto=format&fit=crop"
-    return render_template('movies.html', videos=videos, default_poster=default_poster, user=get_current_user())
+    return render_template('movies.html', videos=videos, user=get_current_user())
 
 @app.route('/admin', methods=['GET', 'POST'])
 def admin():
@@ -130,15 +157,15 @@ def admin():
             flash('No selected video file.')
             return redirect(request.url)
             
-        if video_file and allowed_file(video_file.filename):
+        if video_file and allowed_video(video_file.filename):
             # Save Video
             v_filename = secure_filename(video_file.filename)
             v_path = os.path.join(app.config['UPLOAD_FOLDER'], v_filename)
             video_file.save(v_path)
             
-            # Save Poster (Optional)
+            # Save Poster (Optional) — uses allowed_image() not allowed_video()
             p_filename = None
-            if poster_file and allowed_file(poster_file.filename):
+            if poster_file and poster_file.filename != '' and allowed_image(poster_file.filename):
                 p_filename = str(uuid.uuid4())[:8] + "_" + secure_filename(poster_file.filename)
                 p_path = os.path.join(app.config['UPLOAD_FOLDER'], p_filename)
                 poster_file.save(p_path)
@@ -177,8 +204,11 @@ def delete_video(video_id):
                 os.remove(p_path)
     except Exception as e:
         print(f"Error deleting files: {e}")
+    
+    # 3. Delete any rooms associated with this video
+    Room.query.filter_by(video_id=video.id).delete()
         
-    # 3. Remove From DB
+    # 4. Remove From DB
     db.session.delete(video)
     db.session.commit()
     

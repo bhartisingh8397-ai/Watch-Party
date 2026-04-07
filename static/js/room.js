@@ -61,18 +61,36 @@ const chatInput = document.getElementById('chatInput');
 const sendMessage = document.getElementById('sendMessage');
 const chatBox = document.getElementById('chatBox');
 
-sendMessage.addEventListener('click', () => {
+function sendChatMessage() {
     const msg = chatInput.value.trim();
     if (msg) {
         socket.emit('chat_message', { room: ROOM_ID, username: USERNAME, message: msg });
         chatInput.value = '';
+    }
+}
+
+sendMessage.addEventListener('click', sendChatMessage);
+
+// Enter key sends chat message
+chatInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        sendChatMessage();
     }
 });
 
 socket.on('message', (data) => {
     const div = document.createElement('div');
     div.classList.add('chat-message');
-    div.innerHTML = `<span class="chat-username">${data.username}:</span> ${data.msg}`;
+    
+    // Determine if this is a sent or received message
+    if (data.username === USERNAME) {
+        div.classList.add('chat-message-sent');
+    } else {
+        div.classList.add('chat-message-received');
+    }
+    
+    div.innerHTML = `<span class="chat-username">${data.username}</span><span class="chat-text">${data.msg}</span>`;
     chatBox.appendChild(div);
     chatBox.scrollTop = chatBox.scrollHeight;
 });
@@ -82,11 +100,21 @@ const danmakuInput = document.getElementById('danmakuInput');
 const sendDanmaku = document.getElementById('sendDanmaku');
 const danmakuContainer = document.getElementById('danmakuContainer');
 
-sendDanmaku.addEventListener('click', () => {
+function sendDanmakuMessage() {
     const text = danmakuInput.value.trim();
     if (text) {
         socket.emit('on_screen_text', { room: ROOM_ID, text: text, color: 'white' });
         danmakuInput.value = '';
+    }
+}
+
+sendDanmaku.addEventListener('click', sendDanmakuMessage);
+
+// Enter key sends danmaku
+danmakuInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        sendDanmakuMessage();
     }
 });
 
@@ -149,7 +177,7 @@ socket.on('status', (data) => {
     const div = document.createElement('div');
     div.style.fontStyle = 'italic';
     div.style.color = 'var(--text-muted)';
-    div.classList.add('chat-message');
+    div.classList.add('chat-message', 'chat-message-status');
     div.innerText = data.msg;
     chatBox.appendChild(div);
     chatBox.scrollTop = chatBox.scrollHeight;

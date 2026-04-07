@@ -12,14 +12,18 @@
                     {% if video.poster_filename %}
                         <img src="{{ url_for('static', filename='uploads/' + video.poster_filename) }}" alt="{{ video.title }}">
                     {% else %}
-                        <img src="https://placehold.co/300x450/00050D/1A98FF/png?text={{ video.title|replace(' ', '+') }}" alt="{{ video.title }}">
+                        <img src="{{ url_for('static', filename='images/poster_dummy_png_1775502805003.png') }}" alt="{{ video.title }}">
                     {% endif %}
                     <div class="poster-overlay">
+                        {% if user %}
                         <form action="{{ url_for('create_room') }}" method="POST">
                             <input type="hidden" name="room_name" value="{{ video.title }} Party">
                             <input type="hidden" name="video_id" value="{{ video.id }}">
                             <button type="submit" class="btn btn-primary">Watch Now</button>
                         </form>
+                        {% else %}
+                        <a href="{{ url_for('login') }}" class="btn btn-primary">Login to Watch</a>
+                        {% endif %}
                     </div>
                 </div>
                 <div class="movie-info">
@@ -31,18 +35,10 @@
             
             <!-- Dummy Cinematic Content -->
             {% if videos|length < 6 %}
-                {% set dummy_posters = [
-                    'https://images.unsplash.com/photo-1605142859862-978be7eba909?q=80&w=1470&auto=format&fit=crop',
-                    'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=1284&auto=format&fit=crop',
-                    'https://images.unsplash.com/photo-1541535650810-10d26f597a65?q=80&w=1287&auto=format&fit=crop',
-                    'https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=1494&auto=format&fit=crop',
-                    'https://images.unsplash.com/photo-1594909122845-11baa439b7bf?q=80&w=1470&auto=format&fit=crop',
-                    'https://images.unsplash.com/photo-1485846234645-a62644f84728?q=80&w=1459&auto=format&fit=crop'
-                ] %}
                 {% for i in range(6 - videos|length) %}
                 <div class="movie-card dummy-card">
                     <div class="poster-wrapper">
-                        <img src="{{ dummy_posters[i % dummy_posters|length] }}" alt="Coming Soon">
+                        <img src="{{ url_for('static', filename='images/poster_dummy_png_1775502805003.png') }}" alt="Coming Soon">
                         <div class="poster-overlay">
                             <span class="badge" style="background: var(--primary); color: white; padding: 5px 15px; border-radius: 20px; font-weight: 800; font-size: 0.7rem;">PREMIERING SOON</span>
                         </div>
