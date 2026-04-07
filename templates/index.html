@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero-wrapper">
+    <div class="hero-content">
+        <div class="hero">
+            <h1>Experience Movies <span>Together, Anytime.</span></h1>
+            <p>Join millions of fans watching their favorite stories synchronized in real-time. Chat, react, and feel the cinema vibe from your home.</p>
+            <div class="hero-actions">
+                <a href="#join" class="btn btn-primary">Join a Party</a>
+                <a href="#create" class="btn btn-secondary">Host Your Own</a>
+            </div>
+        </div>
+    </div>
+    <div class="hero-visuals">
+        <div class="hero-image-mask"></div>
+    </div>
+</section>
+
+<section id="create" style="padding: 100px 0;">
+    <h2 class="section-title">Host a New Party</h2>
+    <div class="card" style="max-width: 800px; margin: 0 auto;">
+        <p style="color: var(--text-muted); margin-bottom: 30px;">Set up a private or public room to watch your favorite movies with friends. Select a title from our library to get started.</p>
+        <form action="{{ url_for('create_room') }}" method="POST">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div>
+                    <label for="room_name">Room Name</label>
+                    <input type="text" id="room_name" name="room_name" placeholder="e.g. Friday Night Action" required>
+                </div>
+                <div>
+                    <label for="video_id">Select Feature Movie</label>
+                    <select id="video_id" name="video_id" required>
+                        <option value="" disabled selected>Choose a movie...</option>
+                        {% for video in videos %}
+                        <option value="{{ video.id }}">{{ video.title }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            
+            <div style="margin-bottom: 30px; display: flex; align-items: center; gap: 10px; padding: 15px; background: rgba(255,255,255,0.05); border-radius: 4px;">
+                <span style="font-size: 1.2rem;">🎬</span>
+                <p style="font-size: 0.9rem; color: var(--text-muted); margin: 0;">
+                    Can't find your movie? <a href="{{ url_for('admin_login') }}" style="color: var(--primary); font-weight: 600;">Upload new content</a> via the professional dashboard.
+                </p>
+            </div>
+            
+            <button type="submit" class="btn btn-primary" style="width: 100%;">Create Party Room</button>
+        </form>
+    </div>
+</section>
+
+<section id="join" style="padding: 100px 0;">
+    <h2 class="section-title">Active Watch Parties</h2>
+    {% if rooms %}
+    <div class="room-grid">
+        {% for room in rooms %}
+        <div class="card room-card-premium" style="background: linear-gradient(rgba(0, 5, 13, 0.7), rgba(0, 5, 13, 0.9)), url('https://images.unsplash.com/photo-1594909122845-11baa439b7bf?q=80&w=1470&auto=format&fit=crop'); background-size: cover; border: none; min-height: 200px;">
+            <div style="position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: var(--primary);"></div>
+            <div style="padding: 10px;">
+                <h3 style="font-size: 1.4rem; color: white;">{{ room.name }}</h3>
+                <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px;">
+                    Room ID: <span style="color: var(--primary); font-family: monospace; font-weight: 800;">{{ room.id }}</span>
+                </p>
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-top: auto;">
+                    <span style="font-size: 0.75rem; color: var(--primary); font-weight: 800; background: rgba(26,152,255,0.1); padding: 4px 10px; border-radius: 20px; border: 1px solid var(--primary);">LIVE NOW</span>
+                    <a href="{{ url_for('room', room_id=room.id) }}" class="btn btn-primary" style="padding: 8px 16px; font-size: 0.85rem;">Join Now</a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card" style="text-align: center; padding: 60px;">
+        <p style="font-size: 1.1rem; color: var(--text-muted);">No parties are currently active. Be the first to start the show!</p>
+        <a href="#create" class="btn btn-secondary" style="margin-top: 20px;">Host a Party</a>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="movies-library">
+    <div class="container">
+        <h1 class="section-title">Movie Library</h1>
+        
+        <div class="movie-grid">
+            {% for video in videos %}
+            <div class="movie-card">
+                <div class="poster-wrapper">
+                    {% if video.poster_filename %}
+                        <img src="{{ url_for('static', filename='uploads/' + video.poster_filename) }}" alt="{{ video.title }}">
+                    {% else %}
+                        <img src="https://placehold.co/300x450/00050D/1A98FF/png?text={{ video.title|replace(' ', '+') }}" alt="{{ video.title }}">
+                    {% endif %}
+                    <div class="poster-overlay">
+                        <form action="{{ url_for('create_room') }}" method="POST">
+                            <input type="hidden" name="room_name" value="{{ video.title }} Party">
+                            <input type="hidden" name="video_id" value="{{ video.id }}">
+                            <button type="submit" class="btn btn-primary">Watch Now</button>
+                        </form>
+                    </div>
+                </div>
+                <div class="movie-info">
+                    <h3>{{ video.title }}</h3>
+                    <p class="movie-meta">Released: 2024 • 4K HDR</p>
+                </div>
+            </div>
+            {% endfor %}
+            
+            <!-- Dummy Cinematic Content -->
+            {% if videos|length < 6 %}
+                {% set dummy_posters = [
+                    'https://images.unsplash.com/photo-1605142859862-978be7eba909?q=80&w=1470&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=1284&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1541535650810-10d26f597a65?q=80&w=1287&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=1494&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1594909122845-11baa439b7bf?q=80&w=1470&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1485846234645-a62644f84728?q=80&w=1459&auto=format&fit=crop'
+                ] %}
+                {% for i in range(6 - videos|length) %}
+                <div class="movie-card dummy-card">
+                    <div class="poster-wrapper">
+                        <img src="{{ dummy_posters[i % dummy_posters|length] }}" alt="Coming Soon">
+                        <div class="poster-overlay">
+                            <span class="badge" style="background: var(--primary); color: white; padding: 5px 15px; border-radius: 20px; font-weight: 800; font-size: 0.7rem;">PREMIERING SOON</span>
+                        </div>
+                    </div>
+                    <div class="movie-info">
+                        <h3>Cinematic Experience #{{ i+1 }}</h3>
+                        <p class="movie-meta">Premiering Soon • Exclusive</p>
+                    </div>
+                </div>
+                {% endfor %}
+            {% endif %}
+            
+            {% if not videos %}
+            <div class="empty-state">
+                <p>No movies uploaded yet. Visit the Admin panel to add content!</p>
+                <a href="{{ url_for('admin_login') }}" class="btn btn-secondary">Go to Admin</a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</section>
+{% endblock %}

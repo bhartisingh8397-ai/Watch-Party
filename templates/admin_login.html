@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card" style="max-width: 400px; margin: 100px auto;">
+    <h2>Admin Login</h2>
+    <form action="{{ url_for('admin_login') }}" method="POST">
+        <label for="password">Admin Password</label>
+        <input type="password" name="password" placeholder="Enter Admin Password" required>
+        <button type="submit" class="btn" style="width: 100%;">Login</button>
+    </form>
+    <p style="margin-top: 20px; font-size: 0.8rem; color: #888; text-align: center;">
+        Note: The default password is <code>admin123</code>
+    </p>
+</div>
+{% endblock %}
