@@ -321,3 +321,24 @@ if (typeof HAS_SUBTITLE !== 'undefined' && HAS_SUBTITLE) {
         });
     }
 }
+
+// ===== INVITE LINK COPY =====
+const inviteBtn = document.getElementById('inviteBtn');
+if (inviteBtn) {
+    inviteBtn.addEventListener('click', () => {
+        const url = window.location.href;
+        navigator.clipboard.writeText(url).then(() => {
+            const originalText = inviteBtn.innerText;
+            inviteBtn.innerText = 'Copied! ✅';
+            inviteBtn.style.background = '#2ecc71';
+            
+            setTimeout(() => {
+                inviteBtn.innerText = originalText;
+                inviteBtn.style.background = 'var(--primary)';
+            }, 2000);
+        }).catch(err => {
+            console.error('Failed to copy: ', err);
+            alert('Room Link: ' + url);
+        });
+    });
+}
