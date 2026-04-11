@@ -30,6 +30,9 @@
                    {% endif %}
                    controls preload="auto" width="100%" height="100%" crossorigin="anonymous">
                 <source src="{{ url_for('static', filename='uploads/' + room.video.filename) }}">
+                {% if subtitle_url %}
+                <track kind="captions" src="{{ subtitle_url }}" srclang="en" label="English" default>
+                {% endif %}
                 Your browser does not support the video tag.
             </video>
             <div id="playback-error-msg" class="playback-warning card" style="display: none;">
@@ -72,13 +75,37 @@
                 <button class="emoji-btn" data-emoji="🔥">🔥</button>
                 <button class="emoji-btn" data-emoji="😂">😂</button>
                 <button class="emoji-btn" data-emoji="😮">😮</button>
+                {% if subtitle_url %}
+                <button class="emoji-btn subtitle-toggle-btn" id="subtitleToggle" title="Toggle Subtitles (CC)" style="font-size: 0.7rem; font-weight: 800; letter-spacing: 1px;">CC</button>
+                {% endif %}
             </div>
         </div>
     </div>
 
     <div class="chat-section card">
-        <h3 style="margin-bottom: 10px;">Live Chat</h3>
+        <!-- Active Users Panel -->
+        <div class="active-users-panel">
+            <div class="active-users-header" id="toggleActiveUsers">
+                <div class="active-users-title">
+                    <span class="active-dot"></span>
+                    <h3>Online</h3>
+                    <span class="active-count" id="activeUserCount">0</span>
+                </div>
+                <svg class="chevron-icon" id="chevronIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </div>
+            <div class="active-users-list" id="activeUsersList">
+                <!-- Users will be injected here by JS -->
+            </div>
+        </div>
+
+        <h3 style="padding: 0 15px; margin-bottom: 5px; margin-top: 10px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted);">Live Chat</h3>
         <div id="chatBox" class="chat-box"></div>
+        <div id="typingIndicator" class="typing-indicator" style="display: none;">
+            <div class="typing-dots">
+                <span></span><span></span><span></span>
+            </div>
+            <span id="typingUser"></span> is typing...
+        </div>
         <div class="chat-controls">
             <input type="text" id="chatInput" placeholder="Say something..." style="margin-bottom: 0;">
             <button id="sendMessage" class="btn">Send</button>
@@ -96,6 +123,7 @@
     {% else %}
     const USERNAME = "Guest_" + Math.floor(Math.random() * 1000);
     {% endif %}
+    const HAS_SUBTITLE = {{ 'true' if subtitle_url else 'false' }};
 </script>
 <script src="{{ url_for('static', filename='js/room.js') }}"></script>
 {% endblock %}

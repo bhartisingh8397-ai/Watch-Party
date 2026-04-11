@@ -4,17 +4,32 @@
 <section class="auth-section">
     <div class="auth-card">
         <h1>Sign Up</h1>
+        <p style="text-align: center; color: var(--text-muted); margin-bottom: 25px; font-size: 0.9rem;">
+            Your email will be verified through Google
+        </p>
         <form action="{{ url_for('signup') }}" method="POST">
             <div class="form-group">
-                <label for="username">Username</label>
-                <input type="text" name="username" placeholder="Username" required>
+                <label for="username">Choose Username</label>
+                <input type="text" name="username" placeholder="Pick a unique username" required>
             </div>
             <div class="form-group">
-                <label for="password">Password</label>
-                <input type="password" name="password" placeholder="Password" required>
+                <label for="password">Create Password</label>
+                <input type="password" name="password" placeholder="Min 6 characters" required minlength="6">
             </div>
-            <button type="submit" class="btn btn-primary">Sign Up</button>
+            <button type="submit" class="btn btn-google" style="margin-top: 10px;">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" width="18">
+                Verify Email & Sign Up with Google
+            </button>
         </form>
+
+        <div class="auth-divider">
+            <span>OR</span>
+        </div>
+
+        <a href="{{ url_for('login_google') }}" class="btn btn-primary" style="width: 100; display: block; text-align: center;">
+            Already have an account? Sign in with Google
+        </a>
+
         <p>Already have an account? <a href="{{ url_for('login') }}">Sign in.</a></p>
     </div>
 </section>

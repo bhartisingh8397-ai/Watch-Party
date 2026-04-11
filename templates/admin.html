@@ -18,6 +18,9 @@
             <label for="title">Video Title</label>
             <input type="text" name="title" placeholder="E.g., Inception Trailer" required>
             
+            <label for="genre">Genre</label>
+            <input type="text" name="genre" placeholder="E.g., Action, Thriller, Comedy" style="margin-bottom: 20px;">
+            
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                 <div class="field-group">
                     <label for="video">Video File (.mp4, .mkv, .avi, etc.)</label>
@@ -61,9 +64,9 @@
                     <td style="padding: 10px;">{{ video.filename }}</td>
                     <td style="padding: 10px;">
                         {% if video.poster_filename %}
-                        <span style="color: #2ecc71;">✅ Yes</span>
+                        <img src="{{ url_for('static', filename='uploads/' + video.poster_filename) }}" alt="Poster" style="width: 50px; height: 75px; object-fit: cover; border-radius: 8px; border: 1px solid var(--primary); box-shadow: 0 4px 10px rgba(0,0,0,0.3);">
                         {% else %}
-                        <span style="color: #ff4b2b;">❌ None</span>
+                        <img src="{{ url_for('static', filename='images/poster_dummy_png_1775502805003.png') }}" alt="No Poster" style="width: 50px; height: 75px; object-fit: cover; border-radius: 8px; opacity: 0.3;">
                         {% endif %}
                     </td>
                     <td style="padding: 10px;">{{ video.upload_date.strftime('%Y-%m-%d') }}</td>
@@ -80,5 +83,188 @@
         <p style="margin-top: 10px;">No videos uploaded yet.</p>
         {% endif %}
     </div>
+</div>
+
+<!-- User Management Section -->
+<div class="card" style="margin-top: 30px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <div>
+            <h2>👥 User Management</h2>
+            <p style="color: #888;">View all registered users, see who's watching what, and manage access.</p>
+        </div>
+        <div style="display: flex; gap: 15px; align-items: center;">
+            <div class="admin-stat-badge">
+                <span class="stat-number">{{ users|length }}</span>
+                <span class="stat-label">Total Users</span>
+            </div>
+            <div class="admin-stat-badge admin-stat-live">
+                <span class="stat-number">{{ active_watching|length }}</span>
+                <span class="stat-label">Watching Now</span>
+            </div>
+        </div>
+    </div>
+
+    {% if users %}
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>User</th>
+                <th>Email</th>
+                <th>Joined</th>
+                <th>Status</th>
+                <th>Currently Watching</th>
+                <th style="text-align: right;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for u in users %}
+            <tr class="{% if u.is_blocked %}user-row-blocked{% endif %}">
+                <td>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div class="admin-user-avatar">{{ u.username[0]|upper }}</div>
+                        <div>
+                            <strong>{{ u.username }}</strong>
+                            {% if u.google_id %}
+                            <span class="tag-google" title="Google Account">G</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </td>
+                <td style="color: var(--text-muted);">{{ u.email }}</td>
+                <td style="color: var(--text-muted);">{{ u.created_at.strftime('%d %b %Y') }}</td>
+                <td>
+                    {% if u.is_blocked %}
+                        <span class="status-badge status-blocked">
+                            <span class="status-dot-red"></span> Blocked
+                        </span>
+                    {% else %}
+                        {% if u.username in active_watching %}
+                        <span class="status-badge status-live">
+                            <span class="status-dot-green"></span> Online
+                        </span>
+                        {% else %}
+                        <span class="status-badge status-offline">
+                            <span class="status-dot-grey"></span> Offline
+                        </span>
+                        {% endif %}
+                    {% endif %}
+                </td>
+                <td>
+                    {% if u.username in active_watching %}
+                    <div class="watching-info">
+                        <span class="watching-movie-icon">🎬</span>
+                        <div>
+                            <span class="watching-movie-title">{{ active_watching[u.username].movie }}</span>
+                            <span class="watching-room-code">Room: {{ active_watching[u.username].room_id }}</span>
+                        </div>
+                    </div>
+                    {% else %}
+                    <span style="color: var(--text-muted); font-size: 0.85rem;">—</span>
+                    {% endif %}
+                </td>
+                <td style="text-align: right;">
+                    {% if u.is_blocked %}
+                    <form action="{{ url_for('unblock_user', user_id=u.id) }}" method="POST" style="margin: 0; display: inline;">
+                        <button type="submit" class="btn-admin btn-unblock">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l22 22"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2c0 .24-.02.47-.05.7"/></svg>
+                            Unblock
+                        </button>
+                    </form>
+                    {% else %}
+                    <form action="{{ url_for('block_user', user_id=u.id) }}" method="POST" style="margin: 0; display: inline;" onsubmit="return confirm('⚠️ Block user {{ u.username }}? They will be logged out and unable to sign in.');">
+                        <button type="submit" class="btn-admin btn-block">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+                            Block
+                        </button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="margin-top: 10px; color: var(--text-muted);">No registered users yet.</p>
+    {% endif %}
+</div>
+
+<!-- Contact Messages Section -->
+<div class="card" style="margin-top: 30px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <div>
+            <h2>📬 Contact Messages</h2>
+            <p style="color: #888;">Messages received from the Contact Us page.</p>
+        </div>
+        <div style="display: flex; gap: 15px; align-items: center;">
+            <div class="admin-stat-badge">
+                <span class="stat-number">{{ contact_messages|length }}</span>
+                <span class="stat-label">Total</span>
+            </div>
+            {% if unread_count > 0 %}
+            <div class="admin-stat-badge" style="background: rgba(255, 75, 43, 0.08); border-color: rgba(255, 75, 43, 0.2);">
+                <span class="stat-number" style="color: #ff4b2b;">{{ unread_count }}</span>
+                <span class="stat-label">Unread</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if contact_messages %}
+    <div class="contact-messages-list">
+        {% for msg in contact_messages %}
+        <div class="contact-msg-card {% if not msg.is_read %}contact-msg-unread{% endif %}">
+            <div class="contact-msg-header">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div class="admin-user-avatar" style="{% if not msg.is_read %}border-color: #ff4b2b; background: rgba(255,75,43,0.15); color: #ff4b2b;{% endif %}">
+                        {{ msg.name[0]|upper }}
+                    </div>
+                    <div>
+                        <strong style="color: white;">{{ msg.name }}</strong>
+                        {% if not msg.is_read %}
+                        <span style="background: #ff4b2b; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.65rem; font-weight: 800; margin-left: 8px;">NEW</span>
+                        {% endif %}
+                        <br>
+                        <span style="color: var(--text-muted); font-size: 0.82rem;">{{ msg.email }}</span>
+                    </div>
+                </div>
+                <div style="text-align: right;">
+                    <span style="color: var(--primary); font-size: 0.78rem; font-weight: 700; text-transform: uppercase;">
+                        {% if msg.subject == 'general' %}💬 General
+                        {% elif msg.subject == 'bug' %}🐛 Bug Report
+                        {% elif msg.subject == 'feature' %}💡 Feature Request
+                        {% elif msg.subject == 'partnership' %}🤝 Partnership
+                        {% elif msg.subject == 'support' %}🛠️ Support
+                        {% else %}{{ msg.subject }}
+                        {% endif %}
+                    </span>
+                    <br>
+                    <span style="color: var(--text-muted); font-size: 0.78rem;">{{ msg.created_at.strftime('%d %b %Y • %I:%M %p') }}</span>
+                </div>
+            </div>
+            <div class="contact-msg-body">
+                <p style="color: var(--text-light); line-height: 1.7; font-size: 0.92rem;">{{ msg.message }}</p>
+            </div>
+            <div class="contact-msg-actions">
+                {% if not msg.is_read %}
+                <form action="{{ url_for('mark_message_read', msg_id=msg.id) }}" method="POST" style="margin: 0; display: inline;">
+                    <button type="submit" class="btn-admin btn-unblock" style="font-size: 0.78rem;">
+                        ✅ Mark as Read
+                    </button>
+                </form>
+                {% else %}
+                <span style="color: var(--text-muted); font-size: 0.78rem;">✅ Read</span>
+                {% endif %}
+                <form action="{{ url_for('delete_message', msg_id=msg.id) }}" method="POST" style="margin: 0; display: inline;" onsubmit="return confirm('Delete this message permanently?');">
+                    <button type="submit" class="btn-admin btn-block" style="font-size: 0.78rem;">
+                        🗑️ Delete
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p style="margin-top: 10px; color: var(--text-muted);">📭 No messages yet. When users submit the contact form, their messages will appear here.</p>
+    {% endif %}
 </div>
 {% endblock %}

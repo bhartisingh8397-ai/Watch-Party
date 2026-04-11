@@ -65,6 +65,7 @@ function sendChatMessage() {
     const msg = chatInput.value.trim();
     if (msg) {
         socket.emit('chat_message', { room: ROOM_ID, username: USERNAME, message: msg });
+        socket.emit('stop_typing', { room: ROOM_ID, username: USERNAME });
         chatInput.value = '';
     }
 }
@@ -76,6 +77,32 @@ chatInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
         e.preventDefault();
         sendChatMessage();
+    }
+});
+
+// Typing Indicator
+let typingTimeout;
+const typingIndicator = document.getElementById('typingIndicator');
+const typingUser = document.getElementById('typingUser');
+
+chatInput.addEventListener('input', () => {
+    socket.emit('typing', { room: ROOM_ID, username: USERNAME });
+    clearTimeout(typingTimeout);
+    typingTimeout = setTimeout(() => {
+        socket.emit('stop_typing', { room: ROOM_ID, username: USERNAME });
+    }, 2000);
+});
+
+socket.on('user_typing', (data) => {
+    if (typingIndicator && typingUser) {
+        typingUser.textContent = data.username;
+        typingIndicator.style.display = 'flex';
+    }
+});
+
+socket.on('user_stop_typing', (data) => {
+    if (typingIndicator) {
+        typingIndicator.style.display = 'none';
     }
 });
 
@@ -148,11 +175,62 @@ socket.on('reaction_burst', (data) => {
     setTimeout(() => burst.remove(), 2000);
 });
 
-// User Count Tracking with Status Dot UI
+// User Count & Active Users Panel
 const userCountText = document.getElementById('userCountText');
+const activeUsersList = document.getElementById('activeUsersList');
+const activeUserCount = document.getElementById('activeUserCount');
+const toggleActiveUsers = document.getElementById('toggleActiveUsers');
+const chevronIcon = document.getElementById('chevronIcon');
+
+let usersListOpen = true;
+
+if (toggleActiveUsers) {
+    toggleActiveUsers.addEventListener('click', () => {
+        usersListOpen = !usersListOpen;
+        activeUsersList.classList.toggle('collapsed', !usersListOpen);
+        chevronIcon.style.transform = usersListOpen ? 'rotate(0deg)' : 'rotate(-90deg)';
+    });
+}
+
 socket.on('user_count', (data) => {
+    const count = data.count;
+    const users = data.users || [];
+
+    // Update top status bar count
     if (userCountText) {
-        userCountText.innerHTML = `<span style="width: 8px; height: 8px; background: #2ecc71; border-radius: 50%; display: inline-block; box-shadow: 0 0 10px #2ecc71;"></span> ${data.count} Watching`;
+        userCountText.innerHTML = `<span style="width: 8px; height: 8px; background: #2ecc71; border-radius: 50%; display: inline-block; box-shadow: 0 0 10px #2ecc71;"></span> ${count} Watching`;
+    }
+
+    // Update active count badge
+    if (activeUserCount) {
+        activeUserCount.textContent = count;
+    }
+
+    // Render active users list
+    if (activeUsersList) {
+        activeUsersList.innerHTML = '';
+        users.forEach(user => {
+            const userItem = document.createElement('div');
+            userItem.classList.add('active-user-item');
+            
+            // Highlight current user
+            if (user === USERNAME) {
+                userItem.classList.add('is-you');
+            }
+
+            const initial = user.charAt(0).toUpperCase();
+            const colors = ['#D4AF37', '#2ecc71', '#3498db', '#e74c3c', '#9b59b6', '#1abc9c', '#f39c12', '#e67e22'];
+            const color = colors[user.charCodeAt(0) % colors.length];
+
+            userItem.innerHTML = `
+                <div class="user-avatar-sm" style="background: ${color}20; color: ${color}; border: 1px solid ${color}50;">
+                    ${initial}
+                </div>
+                <span class="user-name-label">${user}${user === USERNAME ? ' (You)' : ''}</span>
+                <span class="user-online-dot"></span>
+            `;
+            activeUsersList.appendChild(userItem);
+        });
     }
 });
 
@@ -210,4 +288,36 @@ if (remoteFullscreen) {
             player.requestFullscreen();
         }
     });
+}
+
+// ===== SUBTITLE / CC TOGGLE =====
+if (typeof HAS_SUBTITLE !== 'undefined' && HAS_SUBTITLE) {
+    const subtitleToggle = document.getElementById('subtitleToggle');
+    let subtitlesOn = true; // Default on since we used "default" attribute
+
+    // Ensure text track is showing by default
+    player.ready(() => {
+        const tracks = player.textTracks();
+        for (let i = 0; i < tracks.length; i++) {
+            if (tracks[i].kind === 'captions' || tracks[i].kind === 'subtitles') {
+                tracks[i].mode = 'showing';
+            }
+        }
+        if (subtitleToggle) {
+            subtitleToggle.classList.add('cc-active');
+        }
+    });
+
+    if (subtitleToggle) {
+        subtitleToggle.addEventListener('click', () => {
+            subtitlesOn = !subtitlesOn;
+            const tracks = player.textTracks();
+            for (let i = 0; i < tracks.length; i++) {
+                if (tracks[i].kind === 'captions' || tracks[i].kind === 'subtitles') {
+                    tracks[i].mode = subtitlesOn ? 'showing' : 'disabled';
+                }
+            }
+            subtitleToggle.classList.toggle('cc-active', subtitlesOn);
+        });
+    }
 }

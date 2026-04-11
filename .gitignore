@@ -7,4 +7,5 @@ venv/
 instance/
 .vscode/
 .idea/
-
+static/uploads/*
+!static/uploads/.gitkeep

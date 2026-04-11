@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<!-- ===== HERO BANNER ===== -->
+<section class="contact-hero">
+    <div class="contact-hero-bg"></div>
+    <div class="contact-hero-content">
+        <span class="contact-badge">📬 Get In Touch</span>
+        <h1>Contact Us & <span>Testimonials</span></h1>
+        <p>Have a question, feedback, or just want to say hi? We'd love to hear from you. Check out what our community says!</p>
+    </div>
+</section>
+
+<!-- ===== TESTIMONIALS (Real User Reviews) ===== -->
+<section class="testimonials-section">
+    <h2 class="section-title">💬 What Our Community Says</h2>
+    <p class="section-subtitle">Real reviews from real users who love WatchParty.</p>
+
+    <div class="testimonials-grid">
+        {% if reviews %}
+            {% for rating, reviewer, movie in reviews %}
+            <div class="testimonial-card" style="animation-delay: {{ loop.index * 0.1 }}s;">
+                <div class="testimonial-stars">
+                    {% for i in range(rating.score) %}
+                    <span>⭐</span>
+                    {% endfor %}
+                    {% for i in range(5 - rating.score) %}
+                    <span style="opacity: 0.2;">⭐</span>
+                    {% endfor %}
+                </div>
+                <p class="testimonial-text">"{{ rating.review }}"</p>
+                <p class="testimonial-movie-tag">🎬 About: <strong>{{ movie.title }}</strong></p>
+                <div class="testimonial-author">
+                    <div class="testimonial-avatar" style="background: linear-gradient(135deg, 
+                        {% set colors = ['#D4AF37, #FFD700', '#8B5CF6, #A78BFA', '#2ecc71, #27ae60', '#E91E63, #FF5722', '#00BCD4, #0097A7', '#FF9800, #F57C00'] %}
+                        {{ colors[loop.index0 % 6] }});">
+                        <span>{{ reviewer.username[0]|upper }}{{ reviewer.username[1]|upper if reviewer.username|length > 1 else '' }}</span>
+                    </div>
+                    <div class="testimonial-info">
+                        <h4>{{ reviewer.username }}</h4>
+                        <span>Rated {{ rating.created_at.strftime('%d %b %Y') }}</span>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <!-- Fallback: No reviews yet -->
+            <div class="card" style="grid-column: 1 / -1; text-align: center; padding: 60px;">
+                <p style="font-size: 1.3rem; color: var(--text-muted); margin-bottom: 15px;">🎬 No reviews yet!</p>
+                <p style="color: var(--text-muted);">Be the first to rate and review a movie on WatchParty.</p>
+                <a href="{{ url_for('movies') }}" class="btn btn-primary" style="margin-top: 20px;">Browse Movies</a>
+            </div>
+        {% endif %}
+    </div>
+</section>
+
+<!-- ===== STATS BANNER ===== -->
+<section class="stats-banner">
+    <div class="stat-item">
+        <span class="stat-number" data-target="10000">10,000+</span>
+        <span class="stat-label">Active Users</span>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-item">
+        <span class="stat-number">50,000+</span>
+        <span class="stat-label">Watch Parties Hosted</span>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-item">
+        <span class="stat-number">4.9 ⭐</span>
+        <span class="stat-label">Average Rating</span>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-item">
+        <span class="stat-number">99.9%</span>
+        <span class="stat-label">Uptime</span>
+    </div>
+</section>
+
+<!-- ===== CONTACT SECTION ===== -->
+<section class="contact-section">
+    <div class="contact-grid">
+        <!-- Contact Form -->
+        <div class="contact-form-wrapper">
+            <h2 class="section-title">✉️ Send Us a Message</h2>
+            <p style="color: var(--text-muted); margin-bottom: 30px;">Fill out the form below and our team will get back to you within 24 hours.</p>
+            
+            <form action="{{ url_for('contact') }}" method="POST" class="contact-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="contact_name">Your Name</label>
+                        <input type="text" id="contact_name" name="name" placeholder="John Doe" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="contact_email">Email Address</label>
+                        <input type="email" id="contact_email" name="email" placeholder="john@example.com" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="contact_subject">Subject</label>
+                    <select id="contact_subject" name="subject" required>
+                        <option value="" disabled selected>Choose a topic...</option>
+                        <option value="general">💬 General Inquiry</option>
+                        <option value="bug">🐛 Bug Report</option>
+                        <option value="feature">💡 Feature Request</option>
+                        <option value="partnership">🤝 Partnership</option>
+                        <option value="support">🛠️ Technical Support</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="contact_message">Your Message</label>
+                    <textarea id="contact_message" name="message" placeholder="Tell us what's on your mind..." rows="5" required></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary contact-submit-btn">
+                    Send Message 🚀
+                </button>
+            </form>
+        </div>
+
+        <!-- Contact Info Cards -->
+        <div class="contact-info-wrapper">
+            <div class="contact-info-card">
+                <div class="contact-info-icon">📧</div>
+                <h3>Email Us</h3>
+                <p>support@watchparty.com</p>
+                <span class="contact-response-time">Responds within 24 hours</span>
+            </div>
+
+            <div class="contact-info-card">
+                <div class="contact-info-icon">💬</div>
+                <h3>Live Chat</h3>
+                <p>Available 24/7 for Premium Members</p>
+                <span class="contact-response-time">Average response: 5 minutes</span>
+            </div>
+
+            <div class="contact-info-card">
+                <div class="contact-info-icon">📍</div>
+                <h3>Our Office</h3>
+                <p>WatchParty HQ, Bangalore, India</p>
+                <span class="contact-response-time">Mon - Fri, 9 AM - 6 PM IST</span>
+            </div>
+
+            <div class="contact-info-card">
+                <div class="contact-info-icon">🌐</div>
+                <h3>Social Media</h3>
+                <div class="social-links">
+                    <a href="#" class="social-link" title="Twitter">𝕏</a>
+                    <a href="#" class="social-link" title="Instagram">📸</a>
+                    <a href="#" class="social-link" title="YouTube">▶️</a>
+                    <a href="#" class="social-link" title="Discord">💜</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ===== FAQ SECTION ===== -->
+<section class="faq-section">
+    <h2 class="section-title">❓ Frequently Asked Questions</h2>
+    <div class="faq-grid">
+        <div class="faq-item">
+            <div class="faq-question" onclick="toggleFaq(this)">
+                <span>How does WatchParty sync work?</span>
+                <span class="faq-toggle">+</span>
+            </div>
+            <div class="faq-answer">
+                <p>WatchParty uses WebSocket technology to synchronize video playback across all connected users in real-time. When one user plays, pauses, or seeks, all others follow instantly.</p>
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-question" onclick="toggleFaq(this)">
+                <span>Is WatchParty free to use?</span>
+                <span class="faq-toggle">+</span>
+            </div>
+            <div class="faq-answer">
+                <p>Yes! WatchParty is completely free. Create rooms, join parties, chat with friends — all without any cost. Premium features offer enhanced experiences.</p>
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-question" onclick="toggleFaq(this)">
+                <span>Can I create private watch parties?</span>
+                <span class="faq-toggle">+</span>
+            </div>
+            <div class="faq-answer">
+                <p>Absolutely! When creating a room, toggle the "Private Room" option and set a password. Only users with the password can join your exclusive party.</p>
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-question" onclick="toggleFaq(this)">
+                <span>How many users can join a single party?</span>
+                <span class="faq-toggle">+</span>
+            </div>
+            <div class="faq-answer">
+                <p>There's no hard limit! Our infrastructure supports hundreds of concurrent viewers per room with smooth real-time chat and video synchronization.</p>
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-question" onclick="toggleFaq(this)">
+                <span>What video formats are supported?</span>
+                <span class="faq-toggle">+</span>
+            </div>
+            <div class="faq-answer">
+                <p>We support MP4, MKV, AVI, MOV, WebM, WMV, FLV, and M4V formats. Upload your favorites and start watching together!</p>
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-question" onclick="toggleFaq(this)">
+                <span>How do I report a bug?</span>
+                <span class="faq-toggle">+</span>
+            </div>
+            <div class="faq-answer">
+                <p>Use the contact form above and select "Bug Report" as the subject. Include as much detail as possible — screenshots and steps to reproduce help us fix issues faster!</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+function toggleFaq(element) {
+    const faqItem = element.parentElement;
+    const answer = faqItem.querySelector('.faq-answer');
+    const toggle = element.querySelector('.faq-toggle');
+    
+    // Close all other faqs
+    document.querySelectorAll('.faq-item.active').forEach(item => {
+        if (item !== faqItem) {
+            item.classList.remove('active');
+            item.querySelector('.faq-answer').style.maxHeight = '0';
+            item.querySelector('.faq-toggle').textContent = '+';
+        }
+    });
+    
+    faqItem.classList.toggle('active');
+    if (faqItem.classList.contains('active')) {
+        answer.style.maxHeight = answer.scrollHeight + 'px';
+        toggle.textContent = '−';
+    } else {
+        answer.style.maxHeight = '0';
+        toggle.textContent = '+';
+    }
+}
+</script>
+
+{% endblock %}

@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="profile-section">
+    <div class="profile-header-card card">
+        <div class="profile-cover"></div>
+        <div class="profile-main">
+            <div class="profile-avatar-large">
+                {% if profile_user.avatar_filename %}
+                <img src="{{ url_for('static', filename='uploads/' + profile_user.avatar_filename) }}" alt="Avatar">
+                {% else %}
+                <span>{{ profile_user.username[0]|upper }}</span>
+                {% endif %}
+            </div>
+            <div class="profile-info">
+                <h1>{{ profile_user.username }}</h1>
+                <p class="profile-email">{{ profile_user.email }}</p>
+                {% if profile_user.bio %}
+                <p class="profile-bio">{{ profile_user.bio }}</p>
+                {% endif %}
+                <div class="profile-stats">
+                    <div class="profile-stat">
+                        <span class="stat-val">{{ unique_movies }}</span>
+                        <span class="stat-lbl">Movies Watched</span>
+                    </div>
+                    <div class="profile-stat">
+                        <span class="stat-val">{{ user_ratings|length }}</span>
+                        <span class="stat-lbl">Reviews</span>
+                    </div>
+                    <div class="profile-stat">
+                        <span class="stat-val">{{ profile_user.avg_given_rating() }}</span>
+                        <span class="stat-lbl">Avg Rating</span>
+                    </div>
+                    <div class="profile-stat">
+                        <span class="stat-val">{{ profile_user.created_at.strftime('%b %Y') }}</span>
+                        <span class="stat-lbl">Joined</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if user and user.id == profile_user.id %}
+    <!-- Edit Profile Section -->
+    <div class="card" style="margin-top: 25px;">
+        <h3 style="margin-bottom: 15px;">✏️ Edit Profile</h3>
+        <form action="{{ url_for('profile_edit') }}" method="POST" enctype="multipart/form-data">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div>
+                    <label>Bio</label>
+                    <textarea name="bio" placeholder="Tell us about yourself..." rows="3" style="width: 100%; resize: vertical;">{{ profile_user.bio or '' }}</textarea>
+                </div>
+                <div>
+                    <label>Avatar Image</label>
+                    <input type="file" name="avatar" accept="image/*">
+                    <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 5px;">Upload a profile picture</p>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary" style="margin-top: 15px;">Save Changes</button>
+        </form>
+    </div>
+
+    <!-- Theme Selector -->
+    <div class="card" style="margin-top: 25px;">
+        <h3 style="margin-bottom: 15px;">🎨 Choose Theme</h3>
+        <div class="theme-grid">
+            {% for key, t in themes.items() %}
+            <form action="{{ url_for('set_theme') }}" method="POST" style="margin: 0;">
+                <input type="hidden" name="theme" value="{{ key }}">
+                <button type="submit" class="theme-option {{ 'active' if profile_user.theme == key else '' }}" data-theme="{{ key }}">
+                    <span class="theme-icon">{{ t.icon }}</span>
+                    <span class="theme-name">{{ t.name }}</span>
+                    {% if profile_user.theme == key %}
+                    <span class="theme-active-badge">Active</span>
+                    {% endif %}
+                </button>
+            </form>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Watch History -->
+    <div class="card" style="margin-top: 25px;">
+        <h3 style="margin-bottom: 15px;">📊 Watch History</h3>
+        {% if watch_history %}
+        <div class="history-grid">
+            {% for wh in watch_history %}
+            <div class="history-item">
+                <div class="history-poster">
+                    {% if wh.video and wh.video.poster_filename %}
+                    <img src="{{ url_for('static', filename='uploads/' + wh.video.poster_filename) }}" alt="">
+                    {% else %}
+                    <div class="history-poster-placeholder">🎬</div>
+                    {% endif %}
+                </div>
+                <div class="history-info">
+                    <span class="history-title">{{ wh.video.title if wh.video else 'Deleted Movie' }}</span>
+                    <span class="history-date">{{ wh.watched_at.strftime('%d %b %Y, %I:%M %p') }}</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p style="color: var(--text-muted);">No watch history yet.</p>
+        {% endif %}
+    </div>
+
+    <!-- User Ratings -->
+    {% if user_ratings %}
+    <div class="card" style="margin-top: 25px;">
+        <h3 style="margin-bottom: 15px;">⭐ Reviews Given</h3>
+        <div class="reviews-list">
+            {% for r in user_ratings %}
+            <div class="review-item">
+                <div class="review-header">
+                    <span class="review-movie">{{ r.video.title if r.video else 'Deleted' }}</span>
+                    <span class="review-stars">{{ '⭐' * r.score }}</span>
+                </div>
+                {% if r.review %}
+                <p class="review-text">{{ r.review }}</p>
+                {% endif %}
+                <span class="review-date">{{ r.created_at.strftime('%d %b %Y') }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

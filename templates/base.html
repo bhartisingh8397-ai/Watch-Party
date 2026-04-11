@@ -4,32 +4,28 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WatchParty | Synchronous Cinematic Experience</title>
+    <link rel="shortcut icon" href="{{ url_for('static', filename='images/gold_logo.png') }}" type="image/x-icon">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
 </head>
-<body>
+<body class="theme-{{ user.theme if user and user.theme else 'dark' }}">
     <header>
         <div class="container nav-container">
             <div class="nav-left">
                 <h1 class="logo-text">
                     <a href="{{ url_for('index') }}" class="brand">
-                        <svg class="logo-svg" width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <rect width="24" height="24" rx="6" fill="url(#logo-gradient)"/>
-                            <path d="M9.5 16.5V7.5L16.5 12L9.5 16.5Z" fill="white"/>
-                            <defs>
-                                <linearGradient id="logo-gradient" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
-                                    <stop stop-color="#00A8E1"/>
-                                    <stop offset="1" stop-color="#008CC1"/>
-                                </linearGradient>
-                            </defs>
-                        </svg>
+                        <img src="{{ url_for('static', filename='images/gold_logo.png') }}" alt="WatchParty Logo" class="logo-img">
                         <span>WATCH</span>PARTY
                     </a>
                 </h1>
                 <nav class="primary-nav">
-                    <a href="{{ url_for('index') }}" class="active">Home</a>
+                    <a href="{{ url_for('index') }}">Home</a>
                     <a href="{{ url_for('movies') }}">Movies</a>
+                    <a href="{{ url_for('contact') }}">Contact</a>
+                    {% if user %}
+                    <a href="{{ url_for('recommendations') }}">For You</a>
+                    {% endif %}
                 </nav>
             </div>
 
@@ -42,11 +38,33 @@
                     </button>
 
                     {% if user %}
+                    <!-- Notification Bell -->
+                    <div class="notif-wrapper" id="notifWrapper">
+                        <button class="icon-btn notif-bell" id="notifBell" aria-label="Notifications">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                            </svg>
+                            <span class="notif-badge" id="notifBadge" style="display: none;">0</span>
+                        </button>
+                        <div class="notif-dropdown" id="notifDropdown">
+                            <div class="notif-dropdown-header">
+                                <h4>🔔 Notifications</h4>
+                                <button class="notif-mark-all" id="notifMarkAll">Mark all read</button>
+                            </div>
+                            <div class="notif-list" id="notifList">
+                                <div class="notif-empty">No notifications yet</div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if user %}
                         <div class="user-profile">
                             <span class="avatar-circle">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
                             </span>
-                            <span class="user-greeting">{{ user.username }}</span>
+                            <a href="{{ url_for('profile', username=user.username) }}" class="user-greeting" style="text-decoration: none;">{{ user.username }}</a>
                             {% if session.get('is_admin') %}
                                 <a href="{{ url_for('admin') }}" class="admin-link">Admin</a>
                                 <a href="{{ url_for('admin_logout') }}" class="logout-link" title="Admin Logout">
@@ -97,7 +115,7 @@
     <footer>
         <div class="container">
             <p>&copy; 2026 WatchParty. All cinematic rights reserved.</p>
-            <p style="margin-top: 10px; font-size: 0.8rem; opacity: 0.6;">Powered by Antigravity AI Engine</p>
+            <p style="margin-top: 10px; font-size: 0.8rem; opacity: 0.6;">Powered by WatchParty</p>
         </div>
     </footer>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>

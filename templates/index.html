@@ -17,7 +17,9 @@
         </div>
     </div>
     <div class="hero-visuals">
-        <div class="hero-image-mask"></div>
+        <div class="hero-visuals-container">
+            <img src="{{ url_for('static', filename='images/prime_video_hero_posters_v2_1775479016384.png') }}" class="hero-collage" alt="Movies Collage">
+        </div>
     </div>
 </section>
 
@@ -43,7 +45,22 @@
                 </div>
             </div>
             
-            <div style="margin-bottom: 30px; display: flex; align-items: center; gap: 10px; padding: 15px; background: rgba(255,255,255,0.05); border-radius: 4px;">
+            <!-- Private Room Toggle -->
+            <div class="private-room-toggle" style="margin-top: 20px;">
+                <div style="display: flex; align-items: center; gap: 12px; padding: 15px; background: rgba(255,255,255,0.05); border-radius: 8px; border: 1px solid var(--glass-border);">
+                    <input type="checkbox" id="enablePassword" onchange="document.getElementById('passwordField').style.display = this.checked ? 'block' : 'none'">
+                    <div>
+                        <label for="enablePassword" style="cursor: pointer; margin: 0; font-weight: 700; color: white;">🔒 Make Private Room</label>
+                        <p style="font-size: 0.8rem; color: var(--text-muted); margin: 2px 0 0 0;">Only users with the password can join</p>
+                    </div>
+                </div>
+                <div id="passwordField" style="display: none; margin-top: 10px;">
+                    <label for="room_password">Room Password</label>
+                    <input type="text" name="room_password" id="room_password" placeholder="Set a room password">
+                </div>
+            </div>
+            
+            <div style="margin-top: 20px; margin-bottom: 30px; display: flex; align-items: center; gap: 10px; padding: 15px; background: rgba(255,255,255,0.05); border-radius: 4px;">
                 <span style="font-size: 1.2rem;">🎬</span>
                 <p style="font-size: 0.9rem; color: var(--text-muted); margin: 0;">
                     Can't find your movie? <a href="{{ url_for('admin_login') }}" style="color: var(--primary); font-weight: 600;">Upload new content</a> via the professional dashboard.
@@ -62,6 +79,60 @@
     </div>
 </section>
 
+<!-- Scheduled Parties -->
+{% if scheduled_parties %}
+<section style="padding: 60px 0;">
+    <h2 class="section-title">📅 Upcoming Watch Parties</h2>
+    <div class="scheduled-grid">
+        {% for sp in scheduled_parties %}
+        <div class="card scheduled-card">
+            <div class="scheduled-info">
+                <h3>{{ sp.name }}</h3>
+                <p style="color: var(--primary); font-weight: 700; font-size: 0.9rem;">🎬 {{ sp.video.title }}</p>
+                <p style="color: var(--text-muted); font-size: 0.85rem;">Hosted by <strong>{{ sp.creator.username }}</strong></p>
+            </div>
+            <div class="scheduled-time" data-time="{{ sp.scheduled_at.isoformat() }}">
+                <span class="countdown-badge">
+                    {{ sp.scheduled_at.strftime('%d %b • %I:%M %p') }}
+                </span>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
+<!-- Schedule a Party Form -->
+{% if user %}
+<section style="padding: 60px 0;">
+    <h2 class="section-title">📅 Schedule a Future Party</h2>
+    <div class="card" style="max-width: 600px; margin: 0 auto;">
+        <form action="{{ url_for('schedule_party') }}" method="POST">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div>
+                    <label>Party Name</label>
+                    <input type="text" name="party_name" placeholder="Movie Night!" required>
+                </div>
+                <div>
+                    <label>Select Movie</label>
+                    <select name="video_id" required>
+                        <option value="" disabled selected>Choose...</option>
+                        {% for video in videos %}
+                        <option value="{{ video.id }}">{{ video.title }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div style="margin-top: 15px;">
+                <label>Date & Time</label>
+                <input type="datetime-local" name="scheduled_at" required>
+            </div>
+            <button type="submit" class="btn btn-secondary" style="width: 100%; margin-top: 15px;">Schedule Party 📅</button>
+        </form>
+    </div>
+</section>
+{% endif %}
+
 <section id="join" style="padding: 100px 0;">
     <h2 class="section-title">Active Watch Parties</h2>
     {% if rooms %}
@@ -70,7 +141,12 @@
         <div class="card room-card-premium">
             <div style="position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: var(--primary);"></div>
             <div style="padding: 10px;">
-                <h3 style="font-size: 1.4rem; color: white;">{{ room.name }}</h3>
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                    <h3 style="font-size: 1.4rem; color: white; margin: 0;">{{ room.name }}</h3>
+                    {% if room.is_private %}
+                    <span class="private-badge">🔒</span>
+                    {% endif %}
+                </div>
                 {% if room.video %}
                 <p style="color: var(--primary); font-size: 0.85rem; margin-bottom: 5px; font-weight: 600;">🎬 {{ room.video.title }}</p>
                 {% endif %}

@@ -3,7 +3,12 @@
 {% block content %}
 <section class="movies-library">
     <div class="container">
+        {% if is_recommendations %}
+        <h1 class="section-title">🌙 Recommended For You</h1>
+        <p style="text-align: center; color: var(--text-muted); margin-bottom: 40px;">Based on your watch history and ratings</p>
+        {% else %}
         <h1 class="section-title">Movie Library</h1>
+        {% endif %}
         
         <div class="movie-grid">
             {% for video in videos %}
@@ -16,11 +21,17 @@
                     {% endif %}
                     <div class="poster-overlay">
                         {% if user %}
-                        <form action="{{ url_for('create_room') }}" method="POST">
-                            <input type="hidden" name="room_name" value="{{ video.title }} Party">
-                            <input type="hidden" name="video_id" value="{{ video.id }}">
-                            <button type="submit" class="btn btn-primary">Watch Now</button>
-                        </form>
+                        <div style="display: flex; flex-direction: column; align-items: center; gap: 10px;">
+                            <form action="{{ url_for('create_room') }}" method="POST">
+                                <input type="hidden" name="room_name" value="{{ video.title }} Party">
+                                <input type="hidden" name="video_id" value="{{ video.id }}">
+                                <button type="submit" class="btn btn-primary">Watch Now</button>
+                            </form>
+                            <!-- Rate Button -->
+                            <button class="btn btn-secondary btn-sm rate-trigger" onclick="openRatingModal({{ video.id }}, '{{ video.title }}', {{ user_ratings.get(video.id, 0) }})">
+                                ⭐ Rate
+                            </button>
+                        </div>
                         {% else %}
                         <a href="{{ url_for('login') }}" class="btn btn-primary">Login to Watch</a>
                         {% endif %}
@@ -28,12 +39,29 @@
                 </div>
                 <div class="movie-info">
                     <h3>{{ video.title }}</h3>
+                    <div class="movie-rating-display">
+                        {% set avg = video.avg_rating() %}
+                        {% if avg > 0 %}
+                        <span class="stars-display">
+                            {% for i in range(1, 6) %}
+                            <span class="star {{ 'filled' if i <= avg else '' }}">★</span>
+                            {% endfor %}
+                        </span>
+                        <span class="rating-text">{{ avg }}/5 ({{ video.rating_count() }})</span>
+                        {% else %}
+                        <span class="rating-text" style="opacity: 0.5;">No ratings yet</span>
+                        {% endif %}
+                    </div>
+                    {% if video.genre %}
+                    <p class="movie-meta">{{ video.genre }}</p>
+                    {% else %}
                     <p class="movie-meta">Released: 2024 • 4K HDR</p>
+                    {% endif %}
                 </div>
             </div>
             {% endfor %}
             
-            <!-- Dummy Cinematic Content -->
+            {% if not is_recommendations %}
             {% if videos|length < 6 %}
                 {% for i in range(6 - videos|length) %}
                 <div class="movie-card dummy-card">
@@ -50,14 +78,82 @@
                 </div>
                 {% endfor %}
             {% endif %}
+            {% endif %}
             
             {% if not videos %}
             <div class="empty-state">
+                {% if is_recommendations %}
+                <p>Watch some movies first to get personalized recommendations!</p>
+                <a href="{{ url_for('movies') }}" class="btn btn-secondary">Browse Library</a>
+                {% else %}
                 <p>No movies uploaded yet. Visit the Admin panel to add content!</p>
                 <a href="{{ url_for('admin_login') }}" class="btn btn-secondary">Go to Admin</a>
+                {% endif %}
             </div>
             {% endif %}
         </div>
     </div>
 </section>
+
+<!-- Rating Modal -->
+{% if user %}
+<div id="ratingModal" class="rating-modal" style="display: none;">
+    <div class="rating-modal-content card">
+        <button class="rating-modal-close" onclick="closeRatingModal()">&times;</button>
+        <h3 id="ratingMovieTitle">Rate Movie</h3>
+        <form action="" id="ratingForm" method="POST">
+            <div class="star-rating-input" id="starRatingInput">
+                <span class="star-input" data-value="1">★</span>
+                <span class="star-input" data-value="2">★</span>
+                <span class="star-input" data-value="3">★</span>
+                <span class="star-input" data-value="4">★</span>
+                <span class="star-input" data-value="5">★</span>
+            </div>
+            <input type="hidden" name="score" id="ratingScore" value="0">
+            <textarea name="review" id="ratingReview" placeholder="Write a short review (optional)..." rows="3"></textarea>
+            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">Submit Rating</button>
+        </form>
+    </div>
+</div>
+
+<script>
+function openRatingModal(videoId, title, currentScore) {
+    document.getElementById('ratingModal').style.display = 'flex';
+    document.getElementById('ratingMovieTitle').textContent = '⭐ Rate: ' + title;
+    document.getElementById('ratingForm').action = '/movie/' + videoId + '/rate';
+    document.getElementById('ratingScore').value = currentScore || 0;
+    highlightStars(currentScore || 0);
+}
+
+function closeRatingModal() {
+    document.getElementById('ratingModal').style.display = 'none';
+}
+
+function highlightStars(count) {
+    document.querySelectorAll('.star-input').forEach((star, i) => {
+        star.classList.toggle('selected', i < count);
+    });
+}
+
+document.querySelectorAll('.star-input').forEach(star => {
+    star.addEventListener('click', () => {
+        const val = parseInt(star.dataset.value);
+        document.getElementById('ratingScore').value = val;
+        highlightStars(val);
+    });
+    star.addEventListener('mouseenter', () => {
+        highlightStars(parseInt(star.dataset.value));
+    });
+});
+
+document.getElementById('starRatingInput').addEventListener('mouseleave', () => {
+    highlightStars(parseInt(document.getElementById('ratingScore').value));
+});
+
+// Close modal on backdrop click
+document.getElementById('ratingModal').addEventListener('click', (e) => {
+    if (e.target.id === 'ratingModal') closeRatingModal();
+});
+</script>
+{% endif %}
 {% endblock %}
