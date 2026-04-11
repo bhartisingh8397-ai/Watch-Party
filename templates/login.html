@@ -5,6 +5,7 @@
     <div class="auth-card">
         <h1>Sign In</h1>
         <form action="{{ url_for('login') }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="form-group">
                 <label for="identifier">Username or Email</label>
                 <input type="text" name="identifier" placeholder="Username or Email" required>

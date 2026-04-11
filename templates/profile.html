@@ -45,6 +45,7 @@
     <div class="card" style="margin-top: 25px;">
         <h3 style="margin-bottom: 15px;">✏️ Edit Profile</h3>
         <form action="{{ url_for('profile_edit') }}" method="POST" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                 <div>
                     <label>Bio</label>
@@ -66,6 +67,7 @@
         <div class="theme-grid">
             {% for key, t in themes.items() %}
             <form action="{{ url_for('set_theme') }}" method="POST" style="margin: 0;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="theme" value="{{ key }}">
                 <button type="submit" class="theme-option {{ 'active' if profile_user.theme == key else '' }}" data-theme="{{ key }}">
                     <span class="theme-icon">{{ t.icon }}</span>

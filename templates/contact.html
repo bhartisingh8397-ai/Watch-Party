@@ -87,6 +87,7 @@
             <p style="color: var(--text-muted); margin-bottom: 30px;">Fill out the form below and our team will get back to you within 24 hours.</p>
             
             <form action="{{ url_for('contact') }}" method="POST" class="contact-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="form-row">
                     <div class="form-group">
                         <label for="contact_name">Your Name</label>

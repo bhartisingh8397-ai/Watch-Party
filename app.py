@@ -1,371 +1,710 @@
 import os
+import re
+import secrets
+import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import wraps
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
+from flask import (
+    Flask,
+    render_template,
+    request,
+    redirect,
+    url_for,
+    flash,
+    jsonify,
+    session,
+)
 from flask_socketio import SocketIO, emit, join_room, leave_room
-from models import db, Video, Room, User, Rating, WatchHistory, ScheduledParty, ContactMessage
+from models import (
+    db,
+    Video,
+    Room,
+    User,
+    Rating,
+    WatchHistory,
+    ScheduledParty,
+    ContactMessage,
+    Notification,
+)
+from sqlalchemy import func
+from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.utils import secure_filename
+from werkzeug.security import generate_password_hash, check_password_hash
 from authlib.integrations.flask_client import OAuth
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# For local development, allow insecure transport (HTTP)
-os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+APP_ENV = os.getenv("FLASK_ENV", os.getenv("APP_ENV", "development")).lower()
+IS_PRODUCTION = APP_ENV == "production"
+
+# Allow insecure OAuth transport only for local development.
+if APP_ENV == "development":
+    os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'watchparty_secret_key_123'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///watchparty_v2.db'
-app.config['UPLOAD_FOLDER'] = os.path.join('static', 'uploads')
-app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2GB Limit
+secret_key = os.getenv("SECRET_KEY")
+if IS_PRODUCTION and not secret_key:
+    raise RuntimeError("SECRET_KEY is required in production.")
+app.config["SECRET_KEY"] = secret_key or secrets.token_hex(32)
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///watchparty_v2.db"
+app.config["UPLOAD_FOLDER"] = os.path.join("static", "uploads")
+app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024 * 1024  # 2GB Limit
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = (
+    os.getenv("SESSION_COOKIE_SECURE", "1" if IS_PRODUCTION else "0") == "1"
+)
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=12)
+app.config["SESSION_REFRESH_EACH_REQUEST"] = True
+app.config["PREFERRED_URL_SCHEME"] = "https" if IS_PRODUCTION else "http"
+
+if os.getenv("TRUST_PROXY", "0") == "1":
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
 
 # Google OAuth Configuration
-app.config['GOOGLE_CLIENT_ID'] = os.getenv('GOOGLE_CLIENT_ID')
-app.config['GOOGLE_CLIENT_SECRET'] = os.getenv('GOOGLE_CLIENT_SECRET')
+app.config["GOOGLE_CLIENT_ID"] = os.getenv("GOOGLE_CLIENT_ID")
+app.config["GOOGLE_CLIENT_SECRET"] = os.getenv("GOOGLE_CLIENT_SECRET")
 
 oauth = OAuth(app)
 google = oauth.register(
-    name='google',
-    client_id=app.config['GOOGLE_CLIENT_ID'],
-    client_secret=app.config['GOOGLE_CLIENT_SECRET'],
-    server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
-    client_kwargs={'scope': 'openid email profile'}
+    name="google",
+    client_id=app.config["GOOGLE_CLIENT_ID"],
+    client_secret=app.config["GOOGLE_CLIENT_SECRET"],
+    server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+    client_kwargs={"scope": "openid email profile"},
 )
 
-ALLOWED_VIDEO_EXTENSIONS = {'mp4', 'mkv', 'avi', 'mov', 'webm', 'wmv', 'flv', 'm4v'}
-ALLOWED_SUBTITLE_EXTENSIONS = {'srt', 'vtt', 'ass', 'ssa'}
-ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'}
+ALLOWED_VIDEO_EXTENSIONS = {"mp4", "mkv", "avi", "mov", "webm", "wmv", "flv", "m4v"}
+ALLOWED_SUBTITLE_EXTENSIONS = {"srt", "vtt", "ass", "ssa"}
+ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"}
+EMAIL_REGEX = re.compile(
+    r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$"
+)
+AUTH_RATE_LIMIT_WINDOW_SECONDS = 15 * 60
+LOGIN_MAX_ATTEMPTS = 10
+ADMIN_LOGIN_MAX_ATTEMPTS = 6
+ROOM_PASSWORD_MAX_ATTEMPTS = 10
+FAILED_ATTEMPTS = {}
+
 
 def allowed_video(filename):
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_VIDEO_EXTENSIONS
+    return (
+        "." in filename
+        and filename.rsplit(".", 1)[1].lower() in ALLOWED_VIDEO_EXTENSIONS
+    )
+
 
 def allowed_image(filename):
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_IMAGE_EXTENSIONS
+    return (
+        "." in filename
+        and filename.rsplit(".", 1)[1].lower() in ALLOWED_IMAGE_EXTENSIONS
+    )
+
 
 def allowed_subtitle(filename):
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_SUBTITLE_EXTENSIONS
+    return (
+        "." in filename
+        and filename.rsplit(".", 1)[1].lower() in ALLOWED_SUBTITLE_EXTENSIONS
+    )
+
 
 def srt_to_vtt(srt_path, vtt_path):
     """Convert .srt subtitle file to .vtt format for browser compatibility."""
     import re
-    with open(srt_path, 'r', encoding='utf-8', errors='ignore') as f:
+
+    with open(srt_path, "r", encoding="utf-8", errors="ignore") as f:
         content = f.read()
     # Replace SRT time format commas with VTT dots
-    content = re.sub(r'(\d{2}:\d{2}:\d{2}),(\d{3})', r'\1.\2', content)
-    with open(vtt_path, 'w', encoding='utf-8') as f:
-        f.write('WEBVTT\n\n')
+    content = re.sub(r"(\d{2}:\d{2}:\d{2}),(\d{3})", r"\1.\2", content)
+    with open(vtt_path, "w", encoding="utf-8") as f:
+        f.write("WEBVTT\n\n")
         f.write(content)
+
+
+def _clean_old_attempts(now):
+    stale_before = now - AUTH_RATE_LIMIT_WINDOW_SECONDS
+    for key in list(FAILED_ATTEMPTS.keys()):
+        timestamps = [ts for ts in FAILED_ATTEMPTS[key] if ts >= stale_before]
+        if timestamps:
+            FAILED_ATTEMPTS[key] = timestamps
+        else:
+            del FAILED_ATTEMPTS[key]
+
+
+def _rate_limit_key(scope, principal):
+    return f"{scope}:{principal}"
+
+
+def is_rate_limited(scope, principal, max_attempts):
+    now = time.time()
+    _clean_old_attempts(now)
+    key = _rate_limit_key(scope, principal)
+    timestamps = FAILED_ATTEMPTS.get(key, [])
+    if len(timestamps) < max_attempts:
+        return False, 0
+    retry_after = int(AUTH_RATE_LIMIT_WINDOW_SECONDS - (now - timestamps[0]))
+    return retry_after > 0, max(retry_after, 1)
+
+
+def record_failed_attempt(scope, principal):
+    now = time.time()
+    key = _rate_limit_key(scope, principal)
+    FAILED_ATTEMPTS.setdefault(key, []).append(now)
+    _clean_old_attempts(now)
+
+
+def clear_failed_attempts(scope, principal):
+    FAILED_ATTEMPTS.pop(_rate_limit_key(scope, principal), None)
+
+
+def get_client_ip():
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.remote_addr or "unknown"
+
+
+def is_strong_password(password):
+    if len(password) < 8:
+        return False
+    if not re.search(r"[A-Z]", password):
+        return False
+    if not re.search(r"[a-z]", password):
+        return False
+    if not re.search(r"\d", password):
+        return False
+    if not re.search(r"[^A-Za-z0-9]", password):
+        return False
+    return True
+
+
+def is_valid_email(email):
+    if not email:
+        return False
+    email = email.strip()
+    if len(email) > 254 or ".." in email:
+        return False
+    return bool(EMAIL_REGEX.fullmatch(email))
+
+
+def _get_csrf_token():
+    token = session.get("csrf_token")
+    if not token:
+        token = secrets.token_urlsafe(32)
+        session["csrf_token"] = token
+    return token
+
+
+@app.context_processor
+def inject_csrf_token():
+    return {"csrf_token": _get_csrf_token}
+
+
+@app.before_request
+def protect_from_csrf():
+    if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
+        return None
+
+    sent_token = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token")
+    session_token = session.get("csrf_token")
+    if not sent_token or not session_token:
+        if request.path.startswith("/api/"):
+            return jsonify({"success": False, "error": "Missing CSRF token"}), 400
+        flash("Session validation failed. Please try again.")
+        return redirect(request.referrer or url_for("index"))
+
+    if not secrets.compare_digest(sent_token, session_token):
+        if request.path.startswith("/api/"):
+            return jsonify({"success": False, "error": "Invalid CSRF token"}), 400
+        flash("Session validation failed. Please try again.")
+        return redirect(request.referrer or url_for("index"))
+    return None
+
+
+@app.after_request
+def apply_security_headers(response):
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = (
+        "camera=(), microphone=(), geolocation=(), payment=()"
+    )
+    if IS_PRODUCTION and request.is_secure:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
+
 
 db.init_app(app)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Available themes
 THEMES = {
-    'dark': {'name': 'Midnight Dark', 'icon': '🌙'},
-    'gold': {'name': 'Royal Gold', 'icon': '👑'},
-    'neon': {'name': 'Neon Cyber', 'icon': '💜'},
-    'ocean': {'name': 'Deep Ocean', 'icon': '🌊'},
+    "dark": {"name": "Midnight Dark", "icon": "🌙"},
+    "gold": {"name": "Royal Gold", "icon": "👑"},
+    "neon": {"name": "Neon Cyber", "icon": "💜"},
+    "ocean": {"name": "Deep Ocean", "icon": "🌊"},
 }
 
+
 def get_current_user():
-    user_id = session.get('user_id')
+    user_id = session.get("user_id")
     if user_id:
         return User.query.get(user_id)
     return None
 
+
 def login_required(f):
     """Decorator to require user login for a route."""
+
     @wraps(f)
     def decorated_function(*args, **kwargs):
         user = get_current_user()
         if not user:
-            flash('Please login to access this feature.')
-            return redirect(url_for('login'))
+            flash("Please login to access this feature.")
+            return redirect(url_for("login"))
         if user.is_blocked:
-            session.pop('user_id', None)
-            flash('Your account has been blocked by the admin.')
-            return redirect(url_for('login'))
+            session.pop("user_id", None)
+            flash("Your account has been blocked by the admin.")
+            return redirect(url_for("login"))
         return f(*args, **kwargs)
+
     return decorated_function
 
-# Simple Admin credentials
-ADMIN_PASS = "admin123"
+
+# Admin credentials
+ADMIN_PASS = os.getenv("ADMIN_PASS")
+ADMIN_PASS_HASH = os.getenv("ADMIN_PASS_HASH")
+if not IS_PRODUCTION and not ADMIN_PASS and not ADMIN_PASS_HASH:
+    ADMIN_PASS = "admin123"
+if IS_PRODUCTION and not ADMIN_PASS and not ADMIN_PASS_HASH:
+    raise RuntimeError("Set ADMIN_PASS_HASH (recommended) or ADMIN_PASS in production.")
+
+
+def verify_admin_password(password):
+    if ADMIN_PASS_HASH:
+        return check_password_hash(ADMIN_PASS_HASH, password or "")
+    if ADMIN_PASS:
+        return secrets.compare_digest(password or "", ADMIN_PASS)
+    return False
 
 # Initialize DB
 with app.app_context():
     db.create_all()
-    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-    
+    os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+
     # Auto-migrate: add missing columns to existing DB
     import sqlite3
-    db_path = os.path.join(app.instance_path, 'watchparty_v2.db')
+
+    db_path = os.path.join(app.instance_path, "watchparty_v2.db")
     if os.path.exists(db_path):
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
-        
+
         # User table migrations
-        columns = [col[1] for col in cursor.execute("PRAGMA table_info(user)").fetchall()]
+        columns = [
+            col[1] for col in cursor.execute("PRAGMA table_info(user)").fetchall()
+        ]
         migrations = {
-            'google_id': "ALTER TABLE user ADD COLUMN google_id VARCHAR(120)",
-            'is_blocked': "ALTER TABLE user ADD COLUMN is_blocked BOOLEAN DEFAULT 0",
-            'bio': "ALTER TABLE user ADD COLUMN bio VARCHAR(300) DEFAULT ''",
-            'avatar_filename': "ALTER TABLE user ADD COLUMN avatar_filename VARCHAR(500)",
-            'theme': "ALTER TABLE user ADD COLUMN theme VARCHAR(20) DEFAULT 'dark'",
+            "google_id": "ALTER TABLE user ADD COLUMN google_id VARCHAR(120)",
+            "is_blocked": "ALTER TABLE user ADD COLUMN is_blocked BOOLEAN DEFAULT 0",
+            "bio": "ALTER TABLE user ADD COLUMN bio VARCHAR(300) DEFAULT ''",
+            "avatar_filename": "ALTER TABLE user ADD COLUMN avatar_filename VARCHAR(500)",
+            "theme": "ALTER TABLE user ADD COLUMN theme VARCHAR(20) DEFAULT 'dark'",
         }
         for col_name, sql in migrations.items():
             if col_name not in columns:
                 cursor.execute(sql)
                 print(f"✅ Migration: Added '{col_name}' to user table")
-        
+
         # Room table migrations
-        room_columns = [col[1] for col in cursor.execute("PRAGMA table_info(room)").fetchall()]
+        room_columns = [
+            col[1] for col in cursor.execute("PRAGMA table_info(room)").fetchall()
+        ]
         room_migrations = {
-            'is_private': "ALTER TABLE room ADD COLUMN is_private BOOLEAN DEFAULT 0",
-            'password_hash': "ALTER TABLE room ADD COLUMN password_hash VARCHAR(128)",
+            "is_private": "ALTER TABLE room ADD COLUMN is_private BOOLEAN DEFAULT 0",
+            "password_hash": "ALTER TABLE room ADD COLUMN password_hash VARCHAR(128)",
         }
         for col_name, sql in room_migrations.items():
             if col_name not in room_columns:
                 cursor.execute(sql)
                 print(f"✅ Migration: Added '{col_name}' to room table")
-        
+
         # Video table migrations
-        video_columns = [col[1] for col in cursor.execute("PRAGMA table_info(video)").fetchall()]
+        video_columns = [
+            col[1] for col in cursor.execute("PRAGMA table_info(video)").fetchall()
+        ]
         video_migrations = {
-            'genre': "ALTER TABLE video ADD COLUMN genre VARCHAR(100) DEFAULT ''",
-            'subtitle_filename': "ALTER TABLE video ADD COLUMN subtitle_filename VARCHAR(500)",
+            "genre": "ALTER TABLE video ADD COLUMN genre VARCHAR(100) DEFAULT ''",
+            "subtitle_filename": "ALTER TABLE video ADD COLUMN subtitle_filename VARCHAR(500)",
         }
         for col_name, sql in video_migrations.items():
             if col_name not in video_columns:
                 cursor.execute(sql)
                 print(f"✅ Migration: Added '{col_name}' to video table")
-        
+
         conn.commit()
         conn.close()
 
 # ==================== ROUTES ====================
 
-@app.route('/')
+
+@app.route("/")
 def index():
     rooms = Room.query.all()
     videos = Video.query.all()
     # Get upcoming scheduled parties
-    scheduled = ScheduledParty.query.filter(
-        ScheduledParty.scheduled_at > datetime.utcnow()
-    ).order_by(ScheduledParty.scheduled_at.asc()).limit(5).all()
-    return render_template('index.html', rooms=rooms, videos=videos, 
-                          user=get_current_user(), scheduled_parties=scheduled)
+    scheduled = (
+        ScheduledParty.query.filter(ScheduledParty.scheduled_at > datetime.utcnow())
+        .order_by(ScheduledParty.scheduled_at.asc())
+        .limit(5)
+        .all()
+    )
+    return render_template(
+        "index.html",
+        rooms=rooms,
+        videos=videos,
+        user=get_current_user(),
+        scheduled_parties=scheduled,
+    )
 
-@app.route('/create_room', methods=['POST'])
+
+@app.route("/create_room", methods=["POST"])
 @login_required
 def create_room():
-    room_name = request.form.get('room_name')
-    video_id = request.form.get('video_id')
-    room_password = request.form.get('room_password', '').strip()
-    
+    room_name = request.form.get("room_name")
+    video_id = request.form.get("video_id")
+    room_password = request.form.get("room_password", "").strip()
+
     # Check if an active room already exists for this video
     existing_room = Room.query.filter_by(video_id=video_id).first()
     if existing_room:
-        return redirect(url_for('room', room_id=existing_room.id))
-    
+        return redirect(url_for("room", room_id=existing_room.id))
+
     room_id = str(uuid.uuid4())[:8]
     new_room = Room(id=room_id, name=room_name, video_id=video_id)
     if room_password:
         new_room.set_password(room_password)
     db.session.add(new_room)
     db.session.commit()
-    return redirect(url_for('room', room_id=room_id))
+    return redirect(url_for("room", room_id=room_id))
 
-@app.route('/room/<room_id>')
+
+@app.route("/room/<room_id>")
 @login_required
 def room(room_id):
     room_obj = Room.query.get_or_404(room_id)
-    
+
     # If private room, check if user has access
-    if room_obj.is_private and not session.get(f'room_access_{room_id}'):
-        return redirect(url_for('room_password', room_id=room_id))
-    
+    if room_obj.is_private and not session.get(f"room_access_{room_id}"):
+        return redirect(url_for("room_password", room_id=room_id))
+
     # Track watch history
     user = get_current_user()
     if room_obj.video:
         history = WatchHistory(user_id=user.id, video_id=room_obj.video.id)
         db.session.add(history)
         db.session.commit()
-    
+
     # Build subtitle URL if exists
     subtitle_url = None
     if room_obj.video and room_obj.video.subtitle_filename:
-        subtitle_url = url_for('static', filename='uploads/' + room_obj.video.subtitle_filename)
-    
-    return render_template('room.html', room=room_obj, user=user, subtitle_url=subtitle_url)
+        subtitle_url = url_for(
+            "static", filename="uploads/" + room_obj.video.subtitle_filename
+        )
 
-@app.route('/room/<room_id>/password', methods=['GET', 'POST'])
+    return render_template(
+        "room.html", room=room_obj, user=user, subtitle_url=subtitle_url
+    )
+
+
+@app.route("/room/<room_id>/password", methods=["GET", "POST"])
 @login_required
 def room_password(room_id):
     room_obj = Room.query.get_or_404(room_id)
     if not room_obj.is_private:
-        return redirect(url_for('room', room_id=room_id))
-    
-    if request.method == 'POST':
-        password = request.form.get('password', '')
+        return redirect(url_for("room", room_id=room_id))
+
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        rate_limit_subject = f"{get_client_ip()}:{room_id}"
+        limited, retry_after = is_rate_limited(
+            "room_password", rate_limit_subject, ROOM_PASSWORD_MAX_ATTEMPTS
+        )
+        if limited:
+            flash(f"Too many attempts. Try again in {retry_after} seconds.")
+            return redirect(url_for("room_password", room_id=room_id))
+
         if room_obj.check_password(password):
-            session[f'room_access_{room_id}'] = True
-            return redirect(url_for('room', room_id=room_id))
-        flash('Wrong room password!')
-    
-    return render_template('room_password.html', room=room_obj, user=get_current_user())
+            clear_failed_attempts("room_password", rate_limit_subject)
+            session[f"room_access_{room_id}"] = True
+            return redirect(url_for("room", room_id=room_id))
+        record_failed_attempt("room_password", rate_limit_subject)
+        flash("Wrong room password!")
 
-@app.route('/admin_login', methods=['GET', 'POST'])
+    return render_template("room_password.html", room=room_obj, user=get_current_user())
+
+
+@app.route("/admin_login", methods=["GET", "POST"])
 def admin_login():
-    if request.method == 'POST':
-        password = request.form.get('password')
-        if password == ADMIN_PASS:
-            session['is_admin'] = True
-            return redirect(url_for('admin'))
-        flash('Invalid Password')
-    return render_template('admin_login.html', user=get_current_user())
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        rate_limit_subject = get_client_ip()
+        limited, retry_after = is_rate_limited(
+            "admin_login", rate_limit_subject, ADMIN_LOGIN_MAX_ATTEMPTS
+        )
+        if limited:
+            flash(f"Too many admin login attempts. Retry in {retry_after} seconds.")
+            return render_template("admin_login.html", user=get_current_user())
 
-@app.route('/admin/logout')
+        if verify_admin_password(password):
+            clear_failed_attempts("admin_login", rate_limit_subject)
+            session.clear()
+            session["is_admin"] = True
+            session.permanent = True
+            return redirect(url_for("admin"))
+        record_failed_attempt("admin_login", rate_limit_subject)
+        flash("Invalid Password")
+    return render_template("admin_login.html", user=get_current_user())
+
+
+@app.route("/admin/logout", methods=["POST"])
 def admin_logout():
-    session.pop('is_admin', None)
-    flash('Admin logged out successfully!')
-    return redirect(url_for('index'))
+    session.clear()
+    flash("Admin logged out successfully!")
+    return redirect(url_for("index"))
 
-@app.route('/signup', methods=['GET', 'POST'])
+
+@app.route("/signup", methods=["GET", "POST"])
 def signup():
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        
-        if User.query.filter_by(username=username).first():
-            flash('Username already exists')
-            return redirect(url_for('signup'))
-        
-        session['pending_signup'] = {
-            'username': username,
-            'password': password
-        }
-        
-        redirect_uri = url_for('authorize_signup_google', _external=True)
-        if 'localhost' in redirect_uri:
-            redirect_uri = redirect_uri.replace('localhost', '127.0.0.1')
-        return google.authorize_redirect(redirect_uri)
-    
-    return render_template('signup.html', user=get_current_user())
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        username_pattern = r"^[A-Za-z0-9_]{3,30}$"
 
-@app.route('/authorize/signup/google')
+        if not re.match(username_pattern, username):
+            flash(
+                "Username must be 3-30 characters and contain only letters, numbers, or underscores."
+            )
+            return redirect(url_for("signup"))
+
+        if not is_strong_password(password):
+            flash(
+                "Password must be at least 8 chars and include uppercase, lowercase, number, and symbol."
+            )
+            return redirect(url_for("signup"))
+
+        if User.query.filter(func.lower(User.username) == username.lower()).first():
+            flash("Username already exists")
+            return redirect(url_for("signup"))
+
+        session["pending_signup"] = {
+            "username": username,
+            "password_hash": generate_password_hash(password),
+        }
+
+        redirect_uri = url_for("authorize_signup_google", _external=True)
+        if "localhost" in redirect_uri:
+            redirect_uri = redirect_uri.replace("localhost", "127.0.0.1")
+        return google.authorize_redirect(redirect_uri)
+
+    return render_template("signup.html", user=get_current_user())
+
+
+@app.route("/authorize/signup/google")
 def authorize_signup_google():
     try:
-        if 'error' in request.args:
-            session.pop('pending_signup', None)
-            flash(f"Google verification failed: {request.args.get('error_description', 'Unknown error')}")
-            return redirect(url_for('signup'))
-        
-        if 'code' not in request.args:
-            session.pop('pending_signup', None)
+        if "error" in request.args:
+            session.pop("pending_signup", None)
+            flash(
+                f"Google verification failed: {request.args.get('error_description', 'Unknown error')}"
+            )
+            return redirect(url_for("signup"))
+
+        if "code" not in request.args:
+            session.pop("pending_signup", None)
             flash("Authentication code missing.")
-            return redirect(url_for('signup'))
-        
-        pending = session.get('pending_signup')
+            return redirect(url_for("signup"))
+
+        pending = session.get("pending_signup")
         if not pending:
-            flash('Signup session expired. Please try again.')
-            return redirect(url_for('signup'))
-        
+            flash("Signup session expired. Please try again.")
+            return redirect(url_for("signup"))
+
         token = google.authorize_access_token()
-        resp = google.get('https://openidconnect.googleapis.com/v1/userinfo')
+        resp = google.get("https://openidconnect.googleapis.com/v1/userinfo")
         user_info = resp.json()
-        
-        email = user_info.get('email')
-        google_id = user_info.get('sub')
-        
-        if User.query.filter_by(email=email).first():
-            session.pop('pending_signup', None)
-            flash('This email is already registered. Please login instead.')
-            return redirect(url_for('login'))
-        
-        if User.query.filter_by(username=pending['username']).first():
-            session.pop('pending_signup', None)
-            flash('Username was taken. Please try again.')
-            return redirect(url_for('signup'))
-        
-        new_user = User(username=pending['username'], email=email, google_id=google_id)
-        new_user.set_password(pending['password'])
+
+        email = (user_info.get("email") or "").strip().lower()
+        google_id = user_info.get("sub")
+        email_verified = bool(user_info.get("email_verified"))
+        if not email or not google_id:
+            session.pop("pending_signup", None)
+            flash("Could not verify your Google account details. Please try again.")
+            return redirect(url_for("signup"))
+        if not is_valid_email(email):
+            session.pop("pending_signup", None)
+            flash("Invalid email returned by provider.")
+            return redirect(url_for("signup"))
+        if not email_verified:
+            session.pop("pending_signup", None)
+            flash("Google account email is not verified.")
+            return redirect(url_for("signup"))
+
+        if User.query.filter(func.lower(User.email) == email).first():
+            session.pop("pending_signup", None)
+            flash("This email is already registered. Please login instead.")
+            return redirect(url_for("login"))
+
+        if User.query.filter(func.lower(User.username) == pending["username"].lower()).first():
+            session.pop("pending_signup", None)
+            flash("Username was taken. Please try again.")
+            return redirect(url_for("signup"))
+
+        password_hash = pending.get("password_hash")
+        if not password_hash:
+            session.pop("pending_signup", None)
+            flash("Signup session expired. Please try again.")
+            return redirect(url_for("signup"))
+
+        new_user = User(
+            username=pending["username"],
+            email=email,
+            google_id=google_id,
+            password_hash=password_hash,
+        )
         db.session.add(new_user)
         db.session.commit()
-        
-        session.pop('pending_signup', None)
-        session['user_id'] = new_user.id
-        flash(f'Welcome, {new_user.username}! Your email {email} has been verified ✅')
-        return redirect(url_for('index'))
-    
+
+        session.pop("pending_signup", None)
+        session.clear()
+        session["user_id"] = new_user.id
+        session.permanent = True
+        flash(f"Welcome, {new_user.username}! Your email {email} has been verified ✅")
+        return redirect(url_for("index"))
+
     except Exception as e:
-        session.pop('pending_signup', None)
+        session.pop("pending_signup", None)
         flash(f"Error during email verification: {str(e)}")
-        return redirect(url_for('signup'))
+        return redirect(url_for("signup"))
 
-@app.route('/login', methods=['GET', 'POST'])
+
+@app.route("/login", methods=["GET", "POST"])
 def login():
-    if request.method == 'POST':
-        identifier = request.form.get('identifier')
-        password = request.form.get('password')
-        user = User.query.filter((User.email == identifier) | (User.username == identifier)).first()
-        
-        if user and user.is_blocked:
-            flash('Your account has been blocked by the admin. Contact support.')
-            return redirect(url_for('login'))
-        
-        if user and user.check_password(password):
-            session['user_id'] = user.id
-            flash('Logged in successfully!')
-            return redirect(url_for('index'))
-        flash('Invalid username/email or password')
-    return render_template('login.html', user=get_current_user())
+    if request.method == "POST":
+        identifier = request.form.get("identifier", "").strip()
+        password = request.form.get("password", "")
+        rate_limit_subject = f"{get_client_ip()}:{identifier.lower()}"
+        limited, retry_after = is_rate_limited(
+            "login", rate_limit_subject, LOGIN_MAX_ATTEMPTS
+        )
+        if limited:
+            flash(f"Too many login attempts. Retry in {retry_after} seconds.")
+            return render_template("login.html", user=get_current_user())
 
-@app.route('/logout')
+        if not identifier or not password:
+            flash("Please enter both username/email and password")
+            return render_template("login.html", user=get_current_user())
+        if "@" in identifier and not is_valid_email(identifier):
+            flash("Please enter a valid email address.")
+            return render_template("login.html", user=get_current_user())
+
+        lowered_identifier = identifier.lower()
+        user = User.query.filter(
+            (func.lower(User.email) == lowered_identifier)
+            | (func.lower(User.username) == lowered_identifier)
+        ).first()
+
+        if not user:
+            record_failed_attempt("login", rate_limit_subject)
+            flash("Invalid username/email or password")
+            return render_template("login.html", user=get_current_user())
+
+        if user.is_blocked:
+            record_failed_attempt("login", rate_limit_subject)
+            flash("Your account has been blocked by the admin. Contact support.")
+            return redirect(url_for("login"))
+
+        if not user.password_hash and not user.google_id:
+            record_failed_attempt("login", rate_limit_subject)
+            flash("Account not found. Please sign up.")
+            return redirect(url_for("signup"))
+
+        if not user.password_hash:
+            record_failed_attempt("login", rate_limit_subject)
+            flash("This account uses Google Sign-In. Please continue with Google.")
+            return render_template("login.html", user=get_current_user())
+
+        if user.check_password(password):
+            clear_failed_attempts("login", rate_limit_subject)
+            session.clear()
+            session["user_id"] = user.id
+            session.permanent = True
+            flash("Logged in successfully!")
+            return redirect(url_for("index"))
+        record_failed_attempt("login", rate_limit_subject)
+        flash("Invalid username/email or password")
+    return render_template("login.html", user=get_current_user())
+
+
+@app.route("/logout", methods=["POST"])
 def logout():
-    session.pop('user_id', None)
-    session.pop('is_admin', None)
-    flash('Logged out successfully!')
-    return redirect(url_for('index'))
+    session.clear()
+    flash("Logged out successfully!")
+    return redirect(url_for("index"))
 
-@app.route('/login/google')
+
+@app.route("/login/google")
 def login_google():
-    redirect_uri = url_for('authorize_google', _external=True)
-    if 'localhost' in redirect_uri:
-        redirect_uri = redirect_uri.replace('localhost', '127.0.0.1')
+    redirect_uri = url_for("authorize_google", _external=True)
+    if "localhost" in redirect_uri:
+        redirect_uri = redirect_uri.replace("localhost", "127.0.0.1")
     return google.authorize_redirect(redirect_uri)
 
-@app.route('/authorize/google')
+
+@app.route("/authorize/google")
 def authorize_google():
     try:
-        if 'error' in request.args:
-            flash(f"Login failed: {request.args.get('error_description', 'Unknown error')}")
-            return redirect(url_for('login'))
-        if 'code' not in request.args:
+        if "error" in request.args:
+            flash(
+                f"Login failed: {request.args.get('error_description', 'Unknown error')}"
+            )
+            return redirect(url_for("login"))
+        if "code" not in request.args:
             flash("Authentication code missing.")
-            return redirect(url_for('login'))
-            
+            return redirect(url_for("login"))
+
         token = google.authorize_access_token()
-        resp = google.get('https://openidconnect.googleapis.com/v1/userinfo')
+        resp = google.get("https://openidconnect.googleapis.com/v1/userinfo")
         user_info = resp.json()
-        
-        email = user_info.get('email')
-        google_id = user_info.get('sub')
-        username = user_info.get('name', email.split('@')[0])
+
+        email = (user_info.get("email") or "").strip().lower()
+        google_id = user_info.get("sub")
+        email_verified = bool(user_info.get("email_verified"))
+        if not email or not google_id:
+            flash("Could not verify your Google account details. Please try again.")
+            return redirect(url_for("login"))
+        if not is_valid_email(email):
+            flash("Invalid email returned by provider.")
+            return redirect(url_for("login"))
+        if not email_verified:
+            flash("Google account email is not verified.")
+            return redirect(url_for("login"))
+        username = user_info.get("name", email.split("@")[0])
 
         user = User.query.filter_by(google_id=google_id).first()
         if not user:
-            user = User.query.filter_by(email=email).first()
+            user = User.query.filter(func.lower(User.email) == email).first()
             if user:
                 user.google_id = google_id
             else:
                 base_username = username.replace(" ", "").lower()
+                if not base_username:
+                    base_username = email.split("@")[0].lower()
                 unique_username = base_username
                 counter = 1
-                while User.query.filter_by(username=unique_username).first():
+                while User.query.filter(func.lower(User.username) == unique_username).first():
                     unique_username = f"{base_username}{counter}"
                     counter += 1
                 user = User(username=unique_username, email=email, google_id=google_id)
@@ -373,119 +712,157 @@ def authorize_google():
             db.session.commit()
 
         if user.is_blocked:
-            flash('Your account has been blocked by the admin.')
-            return redirect(url_for('login'))
+            flash("Your account has been blocked by the admin.")
+            return redirect(url_for("login"))
 
-        session['user_id'] = user.id
-        flash(f'Welcome, {user.username}!')
-        return redirect(url_for('index'))
+        session.clear()
+        session["user_id"] = user.id
+        session.permanent = True
+        flash(f"Welcome, {user.username}!")
+        return redirect(url_for("index"))
     except Exception as e:
         flash(f"An error occurred during Google sign-in: {str(e)}")
-        return redirect(url_for('login'))
+        return redirect(url_for("login"))
+
 
 # ==================== CONTACT & TESTIMONIALS ====================
 
-@app.route('/contact', methods=['GET', 'POST'])
+
+@app.route("/contact", methods=["GET", "POST"])
 def contact():
-    if request.method == 'POST':
-        name = request.form.get('name', '').strip()
-        email = request.form.get('email', '').strip()
-        subject = request.form.get('subject', '').strip()
-        message = request.form.get('message', '').strip()
-        
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        email = request.form.get("email", "").strip()
+        subject = request.form.get("subject", "").strip()
+        message = request.form.get("message", "").strip()
+
         if name and email and subject and message:
-            msg = ContactMessage(name=name, email=email, subject=subject, message=message)
+            msg = ContactMessage(
+                name=name, email=email, subject=subject, message=message
+            )
             db.session.add(msg)
             db.session.commit()
-            flash('Your message has been sent successfully! We\'ll get back to you soon. ✅')
+            flash(
+                "Your message has been sent successfully! We'll get back to you soon. ✅"
+            )
         else:
-            flash('Please fill in all fields.')
-        return redirect(url_for('contact'))
-    
+            flash("Please fill in all fields.")
+        return redirect(url_for("contact"))
+
     # Fetch real user reviews with text for testimonials
-    reviews = db.session.query(Rating, User, Video).join(User, Rating.user_id == User.id)\
-        .join(Video, Rating.video_id == Video.id)\
-        .filter(Rating.review != None, Rating.review != '')\
-        .order_by(Rating.created_at.desc()).limit(12).all()
-    
-    return render_template('contact.html', user=get_current_user(), reviews=reviews)
+    reviews = (
+        db.session.query(Rating, User, Video)
+        .join(User, Rating.user_id == User.id)
+        .join(Video, Rating.video_id == Video.id)
+        .filter(Rating.review != None, Rating.review != "")
+        .order_by(Rating.created_at.desc())
+        .limit(12)
+        .all()
+    )
+
+    return render_template("contact.html", user=get_current_user(), reviews=reviews)
+
 
 # ==================== PROFILE ====================
 
-@app.route('/profile/<username>')
+
+@app.route("/profile/<username>")
 @login_required
 def profile(username):
     profile_user = User.query.filter_by(username=username).first_or_404()
-    watch_history = WatchHistory.query.filter_by(user_id=profile_user.id)\
-        .order_by(WatchHistory.watched_at.desc()).limit(20).all()
-    user_ratings = Rating.query.filter_by(user_id=profile_user.id)\
-        .order_by(Rating.created_at.desc()).all()
-    
-    # Count unique movies watched
-    unique_movies = db.session.query(WatchHistory.video_id)\
-        .filter_by(user_id=profile_user.id).distinct().count()
-    
-    return render_template('profile.html', profile_user=profile_user,
-                          watch_history=watch_history, user_ratings=user_ratings,
-                          unique_movies=unique_movies, user=get_current_user(),
-                          themes=THEMES)
+    watch_history = (
+        WatchHistory.query.filter_by(user_id=profile_user.id)
+        .order_by(WatchHistory.watched_at.desc())
+        .limit(20)
+        .all()
+    )
+    user_ratings = (
+        Rating.query.filter_by(user_id=profile_user.id)
+        .order_by(Rating.created_at.desc())
+        .all()
+    )
 
-@app.route('/profile/edit', methods=['POST'])
+    # Count unique movies watched
+    unique_movies = (
+        db.session.query(WatchHistory.video_id)
+        .filter_by(user_id=profile_user.id)
+        .distinct()
+        .count()
+    )
+
+    return render_template(
+        "profile.html",
+        profile_user=profile_user,
+        watch_history=watch_history,
+        user_ratings=user_ratings,
+        unique_movies=unique_movies,
+        user=get_current_user(),
+        themes=THEMES,
+    )
+
+
+@app.route("/profile/edit", methods=["POST"])
 @login_required
 def profile_edit():
     user = get_current_user()
-    bio = request.form.get('bio', '').strip()[:300]
+    bio = request.form.get("bio", "").strip()[:300]
     user.bio = bio
-    
-    # Handle avatar upload
-    avatar = request.files.get('avatar')
-    if avatar and avatar.filename != '' and allowed_image(avatar.filename):
-        filename = f"avatar_{user.id}_{secure_filename(avatar.filename)}"
-        avatar.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-        user.avatar_filename = filename
-    
-    db.session.commit()
-    flash('Profile updated! ✅')
-    return redirect(url_for('profile', username=user.username))
 
-@app.route('/profile/theme', methods=['POST'])
+    # Handle avatar upload
+    avatar = request.files.get("avatar")
+    if avatar and avatar.filename != "" and allowed_image(avatar.filename):
+        filename = f"avatar_{user.id}_{secure_filename(avatar.filename)}"
+        avatar.save(os.path.join(app.config["UPLOAD_FOLDER"], filename))
+        user.avatar_filename = filename
+
+    db.session.commit()
+    flash("Profile updated! ✅")
+    return redirect(url_for("profile", username=user.username))
+
+
+@app.route("/profile/theme", methods=["POST"])
 @login_required
 def set_theme():
     user = get_current_user()
-    theme = request.form.get('theme', 'dark')
+    theme = request.form.get("theme", "dark")
     if theme in THEMES:
         user.theme = theme
         db.session.commit()
-        flash(f'Theme changed to {THEMES[theme]["name"]}! {THEMES[theme]["icon"]}')
-    return redirect(url_for('profile', username=user.username))
+        flash(f"Theme changed to {THEMES[theme]['name']}! {THEMES[theme]['icon']}")
+    return redirect(url_for("profile", username=user.username))
+
 
 # ==================== MOVIES & RATINGS ====================
 
-@app.route('/movies')
+
+@app.route("/movies")
 def movies():
     videos = Video.query.all()
     user = get_current_user()
-    
+
     # Get user's ratings for highlighting
     user_ratings = {}
     if user:
         for r in Rating.query.filter_by(user_id=user.id).all():
             user_ratings[r.video_id] = r.score
-    
-    return render_template('movies.html', videos=videos, user=user, user_ratings=user_ratings)
 
-@app.route('/movie/<int:video_id>/rate', methods=['POST'])
+    return render_template(
+        "movies.html", videos=videos, user=user, user_ratings=user_ratings
+    )
+
+
+@app.route("/movie/<int:video_id>/rate", methods=["POST"])
 @login_required
 def rate_movie(video_id):
     user = get_current_user()
     video = Video.query.get_or_404(video_id)
-    score = int(request.form.get('score', 0))
-    review = request.form.get('review', '').strip()[:500]
-    
+    score = int(request.form.get("score", 0))
+    review = request.form.get("review", "").strip()[:500]
+
     if score < 1 or score > 5:
-        flash('Rating must be between 1 and 5')
-        return redirect(url_for('movies'))
-    
+        flash("Rating must be between 1 and 5")
+        return redirect(url_for("movies"))
+
     # Update or create rating
     existing = Rating.query.filter_by(user_id=user.id, video_id=video_id).first()
     if existing:
@@ -495,345 +872,420 @@ def rate_movie(video_id):
     else:
         rating = Rating(user_id=user.id, video_id=video_id, score=score, review=review)
         db.session.add(rating)
-    
+
     db.session.commit()
     flash(f'Rated "{video.title}" {"⭐" * score}')
-    return redirect(url_for('movies'))
+    return redirect(url_for("movies"))
+
 
 # ==================== RECOMMENDATIONS ====================
 
-@app.route('/recommendations')
+
+@app.route("/recommendations")
 @login_required
 def recommendations():
     user = get_current_user()
-    
+
     # Get user's watched video IDs
-    watched_ids = [wh.video_id for wh in WatchHistory.query.filter_by(user_id=user.id).all()]
+    watched_ids = [
+        wh.video_id for wh in WatchHistory.query.filter_by(user_id=user.id).all()
+    ]
     watched_ids = list(set(watched_ids))
-    
+
     # Get user's highly rated video IDs
-    liked_ids = [r.video_id for r in Rating.query.filter_by(user_id=user.id).filter(Rating.score >= 4).all()]
-    
+    liked_ids = [
+        r.video_id
+        for r in Rating.query.filter_by(user_id=user.id).filter(Rating.score >= 4).all()
+    ]
+
     # Strategy 1: Find what other users who watched same movies also watched
-    similar_user_ids = db.session.query(WatchHistory.user_id)\
-        .filter(WatchHistory.video_id.in_(watched_ids))\
-        .filter(WatchHistory.user_id != user.id)\
-        .distinct().all()
-    similar_user_ids = [u[0] for u in similar_user_ids]
-    
-    recommended_ids = db.session.query(WatchHistory.video_id)\
-        .filter(WatchHistory.user_id.in_(similar_user_ids))\
-        .filter(~WatchHistory.video_id.in_(watched_ids))\
-        .distinct().all()
-    recommended_ids = [r[0] for r in recommended_ids]
-    
-    # Strategy 2: Top rated movies user hasn't watched
-    top_rated = db.session.query(Video)\
-        .filter(~Video.id.in_(watched_ids))\
+    similar_user_ids = (
+        db.session.query(WatchHistory.user_id)
+        .filter(WatchHistory.video_id.in_(watched_ids))
+        .filter(WatchHistory.user_id != user.id)
+        .distinct()
         .all()
+    )
+    similar_user_ids = [u[0] for u in similar_user_ids]
+
+    recommended_ids = (
+        db.session.query(WatchHistory.video_id)
+        .filter(WatchHistory.user_id.in_(similar_user_ids))
+        .filter(~WatchHistory.video_id.in_(watched_ids))
+        .distinct()
+        .all()
+    )
+    recommended_ids = [r[0] for r in recommended_ids]
+
+    # Strategy 2: Top rated movies user hasn't watched
+    top_rated = db.session.query(Video).filter(~Video.id.in_(watched_ids)).all()
     top_rated = sorted(top_rated, key=lambda v: v.avg_rating(), reverse=True)
-    
+
     # Combine
-    rec_videos = Video.query.filter(Video.id.in_(recommended_ids)).all() if recommended_ids else []
-    
+    rec_videos = (
+        Video.query.filter(Video.id.in_(recommended_ids)).all()
+        if recommended_ids
+        else []
+    )
+
     # Add top rated that aren't in rec_videos
     rec_video_ids = [v.id for v in rec_videos]
     for v in top_rated:
         if v.id not in rec_video_ids:
             rec_videos.append(v)
-    
-    return render_template('movies.html', videos=rec_videos[:12], user=user, 
-                          user_ratings={}, is_recommendations=True)
+
+    return render_template(
+        "movies.html",
+        videos=rec_videos[:12],
+        user=user,
+        user_ratings={},
+        is_recommendations=True,
+    )
+
 
 # ==================== SCHEDULED PARTIES ====================
 
-@app.route('/schedule_party', methods=['POST'])
+
+@app.route("/schedule_party", methods=["POST"])
 @login_required
 def schedule_party():
     user = get_current_user()
-    name = request.form.get('party_name')
-    video_id = request.form.get('video_id')
-    scheduled_str = request.form.get('scheduled_at')
-    
+    name = request.form.get("party_name")
+    video_id = request.form.get("video_id")
+    scheduled_str = request.form.get("scheduled_at")
+
     try:
-        scheduled_at = datetime.strptime(scheduled_str, '%Y-%m-%dT%H:%M')
+        scheduled_at = datetime.strptime(scheduled_str, "%Y-%m-%dT%H:%M")
     except (ValueError, TypeError):
-        flash('Invalid date/time format.')
-        return redirect(url_for('index'))
-    
+        flash("Invalid date/time format.")
+        return redirect(url_for("index"))
+
     if scheduled_at <= datetime.utcnow():
-        flash('Scheduled time must be in the future.')
-        return redirect(url_for('index'))
-    
+        flash("Scheduled time must be in the future.")
+        return redirect(url_for("index"))
+
     party = ScheduledParty(
-        name=name, video_id=video_id,
-        creator_id=user.id, scheduled_at=scheduled_at
+        name=name, video_id=video_id, creator_id=user.id, scheduled_at=scheduled_at
     )
     db.session.add(party)
     db.session.commit()
     flash(f'Party "{name}" scheduled! 📅')
-    return redirect(url_for('index'))
+    return redirect(url_for("index"))
+
 
 # ==================== ADMIN ====================
 
-@app.route('/admin', methods=['GET', 'POST'])
+
+@app.route("/admin", methods=["GET", "POST"])
 def admin():
-    if not session.get('is_admin'):
-        return redirect(url_for('admin_login'))
-        
-    if request.method == 'POST':
-        if 'video' not in request.files:
-            flash('No video file part.')
+    if not session.get("is_admin"):
+        return redirect(url_for("admin_login"))
+
+    if request.method == "POST":
+        if "video" not in request.files:
+            flash("No video file part.")
             return redirect(request.url)
-            
-        video_file = request.files['video']
-        poster_file = request.files.get('poster')
-        title = request.form.get('title')
-        genre = request.form.get('genre', '')
-        
-        if video_file.filename == '':
-            flash('No selected video file.')
+
+        video_file = request.files["video"]
+        poster_file = request.files.get("poster")
+        title = request.form.get("title")
+        genre = request.form.get("genre", "")
+
+        if video_file.filename == "":
+            flash("No selected video file.")
             return redirect(request.url)
-            
+
         if video_file and allowed_video(video_file.filename):
             v_filename = secure_filename(video_file.filename)
-            v_path = os.path.join(app.config['UPLOAD_FOLDER'], v_filename)
+            v_path = os.path.join(app.config["UPLOAD_FOLDER"], v_filename)
             video_file.save(v_path)
-            
+
             p_filename = None
-            if poster_file and poster_file.filename != '' and allowed_image(poster_file.filename):
-                p_filename = str(uuid.uuid4())[:8] + "_" + secure_filename(poster_file.filename)
-                p_path = os.path.join(app.config['UPLOAD_FOLDER'], p_filename)
+            if (
+                poster_file
+                and poster_file.filename != ""
+                and allowed_image(poster_file.filename)
+            ):
+                p_filename = (
+                    str(uuid.uuid4())[:8] + "_" + secure_filename(poster_file.filename)
+                )
+                p_path = os.path.join(app.config["UPLOAD_FOLDER"], p_filename)
                 poster_file.save(p_path)
-            
+
             # Handle subtitle upload
             s_filename = None
-            subtitle_file = request.files.get('subtitle')
-            if subtitle_file and subtitle_file.filename != '' and allowed_subtitle(subtitle_file.filename):
-                orig_ext = subtitle_file.filename.rsplit('.', 1)[1].lower()
-                s_base = str(uuid.uuid4())[:8] + "_" + secure_filename(subtitle_file.filename)
-                s_path = os.path.join(app.config['UPLOAD_FOLDER'], s_base)
+            subtitle_file = request.files.get("subtitle")
+            if (
+                subtitle_file
+                and subtitle_file.filename != ""
+                and allowed_subtitle(subtitle_file.filename)
+            ):
+                orig_ext = subtitle_file.filename.rsplit(".", 1)[1].lower()
+                s_base = (
+                    str(uuid.uuid4())[:8]
+                    + "_"
+                    + secure_filename(subtitle_file.filename)
+                )
+                s_path = os.path.join(app.config["UPLOAD_FOLDER"], s_base)
                 subtitle_file.save(s_path)
-                
+
                 # Convert SRT to VTT for browser compatibility
-                if orig_ext == 'srt':
-                    vtt_name = s_base.rsplit('.', 1)[0] + '.vtt'
-                    vtt_path = os.path.join(app.config['UPLOAD_FOLDER'], vtt_name)
+                if orig_ext == "srt":
+                    vtt_name = s_base.rsplit(".", 1)[0] + ".vtt"
+                    vtt_path = os.path.join(app.config["UPLOAD_FOLDER"], vtt_name)
                     srt_to_vtt(s_path, vtt_path)
                     s_filename = vtt_name
                 else:
                     s_filename = s_base
-            
-            new_video = Video(title=title, filename=v_filename, poster_filename=p_filename, genre=genre, subtitle_filename=s_filename)
+
+            new_video = Video(
+                title=title,
+                filename=v_filename,
+                poster_filename=p_filename,
+                genre=genre,
+                subtitle_filename=s_filename,
+            )
             db.session.add(new_video)
             db.session.commit()
-            
-            flash('Video uploaded successfully!')
-            return redirect(url_for('admin'))
+
+            flash("Video uploaded successfully!")
+            return redirect(url_for("admin"))
         else:
-            flash('Invalid format!')
+            flash("Invalid format!")
             return redirect(request.url)
 
     videos = Video.query.all()
     users = User.query.all()
-    
+
     active_watching = {}
     for room_id, usernames in ROOM_USERS.items():
         room_obj = Room.query.get(room_id)
         if room_obj and room_obj.video:
             for uname in usernames:
                 active_watching[uname] = {
-                    'movie': room_obj.video.title,
-                    'room_id': room_id
+                    "movie": room_obj.video.title,
+                    "room_id": room_id,
                 }
-    
-    # Fetch contact messages for admin
-    contact_messages = ContactMessage.query.order_by(ContactMessage.created_at.desc()).all()
-    unread_count = ContactMessage.query.filter_by(is_read=False).count()
-    
-    return render_template('admin.html', videos=videos, users=users, 
-                          active_watching=active_watching, user=get_current_user(),
-                          contact_messages=contact_messages, unread_count=unread_count)
 
-@app.route('/admin/delete/<int:video_id>', methods=['POST'])
+    # Fetch contact messages for admin
+    contact_messages = ContactMessage.query.order_by(
+        ContactMessage.created_at.desc()
+    ).all()
+    unread_count = ContactMessage.query.filter_by(is_read=False).count()
+
+    return render_template(
+        "admin.html",
+        videos=videos,
+        users=users,
+        active_watching=active_watching,
+        user=get_current_user(),
+        contact_messages=contact_messages,
+        unread_count=unread_count,
+    )
+
+
+@app.route("/admin/delete/<int:video_id>", methods=["POST"])
 def delete_video(video_id):
-    if not session.get('is_admin'):
-        flash('Unauthorized Action')
-        return redirect(url_for('admin_login'))
-        
+    if not session.get("is_admin"):
+        flash("Unauthorized Action")
+        return redirect(url_for("admin_login"))
+
     video = Video.query.get_or_404(video_id)
-    
+
     try:
-        v_path = os.path.join(app.config['UPLOAD_FOLDER'], video.filename)
+        v_path = os.path.join(app.config["UPLOAD_FOLDER"], video.filename)
         if os.path.exists(v_path):
             os.remove(v_path)
         if video.poster_filename:
-            p_path = os.path.join(app.config['UPLOAD_FOLDER'], video.poster_filename)
+            p_path = os.path.join(app.config["UPLOAD_FOLDER"], video.poster_filename)
             if os.path.exists(p_path):
                 os.remove(p_path)
     except Exception as e:
         print(f"Error deleting files: {e}")
-    
+
     Room.query.filter_by(video_id=video.id).delete()
     Rating.query.filter_by(video_id=video.id).delete()
     WatchHistory.query.filter_by(video_id=video.id).delete()
-    
+
     db.session.delete(video)
     db.session.commit()
-    
-    flash(f"Movie '{video.title}' deleted permanently.")
-    return redirect(url_for('admin'))
 
-@app.route('/admin/block/<int:user_id>', methods=['POST'])
+    flash(f"Movie '{video.title}' deleted permanently.")
+    return redirect(url_for("admin"))
+
+
+@app.route("/admin/block/<int:user_id>", methods=["POST"])
 def block_user(user_id):
-    if not session.get('is_admin'):
-        return redirect(url_for('admin_login'))
+    if not session.get("is_admin"):
+        return redirect(url_for("admin_login"))
     user = User.query.get_or_404(user_id)
     user.is_blocked = True
     db.session.commit()
     flash(f"User '{user.username}' has been blocked.")
-    return redirect(url_for('admin'))
+    return redirect(url_for("admin"))
 
-@app.route('/admin/unblock/<int:user_id>', methods=['POST'])
+
+@app.route("/admin/unblock/<int:user_id>", methods=["POST"])
 def unblock_user(user_id):
-    if not session.get('is_admin'):
-        return redirect(url_for('admin_login'))
+    if not session.get("is_admin"):
+        return redirect(url_for("admin_login"))
     user = User.query.get_or_404(user_id)
     user.is_blocked = False
     db.session.commit()
     flash(f"User '{user.username}' has been unblocked.")
-    return redirect(url_for('admin'))
+    return redirect(url_for("admin"))
 
-@app.route('/admin/message/read/<int:msg_id>', methods=['POST'])
+
+@app.route("/admin/message/read/<int:msg_id>", methods=["POST"])
 def mark_message_read(msg_id):
-    if not session.get('is_admin'):
-        return redirect(url_for('admin_login'))
+    if not session.get("is_admin"):
+        return redirect(url_for("admin_login"))
     msg = ContactMessage.query.get_or_404(msg_id)
     msg.is_read = True
     db.session.commit()
-    flash('Message marked as read.')
-    return redirect(url_for('admin'))
+    flash("Message marked as read.")
+    return redirect(url_for("admin"))
 
-@app.route('/admin/message/delete/<int:msg_id>', methods=['POST'])
+
+@app.route("/admin/message/delete/<int:msg_id>", methods=["POST"])
 def delete_message(msg_id):
-    if not session.get('is_admin'):
-        return redirect(url_for('admin_login'))
+    if not session.get("is_admin"):
+        return redirect(url_for("admin_login"))
     msg = ContactMessage.query.get_or_404(msg_id)
     db.session.delete(msg)
     db.session.commit()
-    flash('Message deleted.')
-    return redirect(url_for('admin'))
+    flash("Message deleted.")
+    return redirect(url_for("admin"))
+
 
 # ==================== SUBTITLE MANAGEMENT ====================
 
-@app.route('/admin/subtitle/<int:video_id>', methods=['POST'])
+
+@app.route("/admin/subtitle/<int:video_id>", methods=["POST"])
 def upload_subtitle(video_id):
-    if not session.get('is_admin'):
-        return redirect(url_for('admin_login'))
-    
+    if not session.get("is_admin"):
+        return redirect(url_for("admin_login"))
+
     video = Video.query.get_or_404(video_id)
-    subtitle_file = request.files.get('subtitle')
-    
-    if not subtitle_file or subtitle_file.filename == '':
-        flash('No subtitle file selected.')
-        return redirect(url_for('admin'))
-    
+    subtitle_file = request.files.get("subtitle")
+
+    if not subtitle_file or subtitle_file.filename == "":
+        flash("No subtitle file selected.")
+        return redirect(url_for("admin"))
+
     if not allowed_subtitle(subtitle_file.filename):
-        flash('Invalid subtitle format. Use .srt, .vtt, .ass, or .ssa')
-        return redirect(url_for('admin'))
-    
+        flash("Invalid subtitle format. Use .srt, .vtt, .ass, or .ssa")
+        return redirect(url_for("admin"))
+
     # Remove old subtitle if exists
     if video.subtitle_filename:
-        old_path = os.path.join(app.config['UPLOAD_FOLDER'], video.subtitle_filename)
+        old_path = os.path.join(app.config["UPLOAD_FOLDER"], video.subtitle_filename)
         if os.path.exists(old_path):
             os.remove(old_path)
-    
-    orig_ext = subtitle_file.filename.rsplit('.', 1)[1].lower()
+
+    orig_ext = subtitle_file.filename.rsplit(".", 1)[1].lower()
     s_base = str(uuid.uuid4())[:8] + "_" + secure_filename(subtitle_file.filename)
-    s_path = os.path.join(app.config['UPLOAD_FOLDER'], s_base)
+    s_path = os.path.join(app.config["UPLOAD_FOLDER"], s_base)
     subtitle_file.save(s_path)
-    
-    if orig_ext == 'srt':
-        vtt_name = s_base.rsplit('.', 1)[0] + '.vtt'
-        vtt_path = os.path.join(app.config['UPLOAD_FOLDER'], vtt_name)
+
+    if orig_ext == "srt":
+        vtt_name = s_base.rsplit(".", 1)[0] + ".vtt"
+        vtt_path = os.path.join(app.config["UPLOAD_FOLDER"], vtt_name)
         srt_to_vtt(s_path, vtt_path)
         video.subtitle_filename = vtt_name
     else:
         video.subtitle_filename = s_base
-    
+
     db.session.commit()
     flash(f'Subtitle uploaded for "{video.title}" ✅')
-    return redirect(url_for('admin'))
+    return redirect(url_for("admin"))
 
-@app.route('/admin/subtitle/delete/<int:video_id>', methods=['POST'])
+
+@app.route("/admin/subtitle/delete/<int:video_id>", methods=["POST"])
 def delete_subtitle(video_id):
-    if not session.get('is_admin'):
-        return redirect(url_for('admin_login'))
-    
+    if not session.get("is_admin"):
+        return redirect(url_for("admin_login"))
+
     video = Video.query.get_or_404(video_id)
     if video.subtitle_filename:
-        s_path = os.path.join(app.config['UPLOAD_FOLDER'], video.subtitle_filename)
+        s_path = os.path.join(app.config["UPLOAD_FOLDER"], video.subtitle_filename)
         if os.path.exists(s_path):
             os.remove(s_path)
         video.subtitle_filename = None
         db.session.commit()
         flash(f'Subtitle removed from "{video.title}"')
-    return redirect(url_for('admin'))
+    return redirect(url_for("admin"))
+
 
 # ==================== NOTIFICATIONS ====================
 
-@app.route('/api/notifications')
+
+@app.route("/api/notifications")
 @login_required
 def get_notifications():
     user = get_current_user()
-    notifications = Notification.query.filter_by(user_id=user.id)\
-        .order_by(Notification.created_at.desc()).limit(20).all()
+    notifications = (
+        Notification.query.filter_by(user_id=user.id)
+        .order_by(Notification.created_at.desc())
+        .limit(20)
+        .all()
+    )
     unread_count = Notification.query.filter_by(user_id=user.id, is_read=False).count()
-    
-    return jsonify({
-        'unread_count': unread_count,
-        'notifications': [{
-            'id': n.id,
-            'type': n.type,
-            'title': n.title,
-            'message': n.message,
-            'link': n.link,
-            'is_read': n.is_read,
-            'created_at': n.created_at.strftime('%d %b • %I:%M %p'),
-            'time_ago': _time_ago(n.created_at)
-        } for n in notifications]
-    })
+
+    return jsonify(
+        {
+            "unread_count": unread_count,
+            "notifications": [
+                {
+                    "id": n.id,
+                    "type": n.type,
+                    "title": n.title,
+                    "message": n.message,
+                    "link": n.link,
+                    "is_read": n.is_read,
+                    "created_at": n.created_at.strftime("%d %b • %I:%M %p"),
+                    "time_ago": _time_ago(n.created_at),
+                }
+                for n in notifications
+            ],
+        }
+    )
+
 
 def _time_ago(dt):
     """Human-friendly time ago string."""
     diff = datetime.utcnow() - dt
     seconds = diff.total_seconds()
     if seconds < 60:
-        return 'Just now'
+        return "Just now"
     elif seconds < 3600:
-        return f'{int(seconds // 60)}m ago'
+        return f"{int(seconds // 60)}m ago"
     elif seconds < 86400:
-        return f'{int(seconds // 3600)}h ago'
+        return f"{int(seconds // 3600)}h ago"
     else:
-        return f'{int(seconds // 86400)}d ago'
+        return f"{int(seconds // 86400)}d ago"
 
-@app.route('/api/notifications/read/<int:notif_id>', methods=['POST'])
+
+@app.route("/api/notifications/read/<int:notif_id>", methods=["POST"])
 @login_required
 def mark_notification_read(notif_id):
     user = get_current_user()
     notif = Notification.query.filter_by(id=notif_id, user_id=user.id).first_or_404()
     notif.is_read = True
     db.session.commit()
-    return jsonify({'success': True})
+    return jsonify({"success": True})
 
-@app.route('/api/notifications/read-all', methods=['POST'])
+
+@app.route("/api/notifications/read-all", methods=["POST"])
 @login_required
 def mark_all_notifications_read():
     user = get_current_user()
-    Notification.query.filter_by(user_id=user.id, is_read=False)\
-        .update({'is_read': True})
+    Notification.query.filter_by(user_id=user.id, is_read=False).update(
+        {"is_read": True}
+    )
     db.session.commit()
-    return jsonify({'success': True})
+    return jsonify({"success": True})
+
 
 # ==================== SOCKET.IO ====================
 
@@ -841,85 +1293,96 @@ ROOM_COUNT = {}
 SID_TO_ROOM = {}
 ROOM_USERS = {}
 
+
 def broadcast_user_list(room):
     users = list(ROOM_USERS.get(room, set()))
     count = len(users)
-    emit('user_count', {'count': count, 'users': users}, room=room)
+    emit("user_count", {"count": count, "users": users}, room=room)
 
-@socketio.on('join')
+
+@socketio.on("join")
 def on_join(data):
-    username = data['username']
-    room = data['room']
+    username = data["username"]
+    room = data["room"]
     sid = request.sid
     join_room(room)
-    SID_TO_ROOM[sid] = {'room': room, 'username': username}
+    SID_TO_ROOM[sid] = {"room": room, "username": username}
     if room not in ROOM_USERS:
         ROOM_USERS[room] = set()
     ROOM_USERS[room].add(username)
     broadcast_user_list(room)
-    emit('status', {'msg': f'{username} has entered the room.'}, room=room)
+    emit("status", {"msg": f"{username} has entered the room."}, room=room)
 
-@socketio.on('disconnect')
+
+@socketio.on("disconnect")
 def on_disconnect():
     sid = request.sid
     if sid in SID_TO_ROOM:
         info = SID_TO_ROOM[sid]
-        room = info['room']
-        username = info['username']
+        room = info["room"]
+        username = info["username"]
         if room in ROOM_USERS:
             ROOM_USERS[room].discard(username)
             if not ROOM_USERS[room]:
                 del ROOM_USERS[room]
         broadcast_user_list(room)
-        emit('status', {'msg': f'{username} has left the room.'}, room=room)
+        emit("status", {"msg": f"{username} has left the room."}, room=room)
         del SID_TO_ROOM[sid]
 
-@socketio.on('leave')
+
+@socketio.on("leave")
 def on_leave(data):
-    username = data['username']
-    room = data['room']
+    username = data["username"]
+    room = data["room"]
     leave_room(room)
     if room in ROOM_USERS:
         ROOM_USERS[room].discard(username)
         if not ROOM_USERS[room]:
             del ROOM_USERS[room]
     broadcast_user_list(room)
-    emit('status', {'msg': f'{username} has left the room.'}, room=room)
+    emit("status", {"msg": f"{username} has left the room."}, room=room)
 
-@socketio.on('chat_message')
+
+@socketio.on("chat_message")
 def on_chat_message(data):
-    room = data['room']
-    username = data['username']
-    message = data['message']
-    emit('message', {'username': username, 'msg': message}, room=room)
+    room = data["room"]
+    username = data["username"]
+    message = data["message"]
+    emit("message", {"username": username, "msg": message}, room=room)
+
 
 # Typing Indicator
-@socketio.on('typing')
+@socketio.on("typing")
 def on_typing(data):
-    room = data['room']
-    username = data['username']
-    emit('user_typing', {'username': username}, room=room, include_self=False)
+    room = data["room"]
+    username = data["username"]
+    emit("user_typing", {"username": username}, room=room, include_self=False)
 
-@socketio.on('stop_typing')
+
+@socketio.on("stop_typing")
 def on_stop_typing(data):
-    room = data['room']
-    username = data['username']
-    emit('user_stop_typing', {'username': username}, room=room, include_self=False)
+    room = data["room"]
+    username = data["username"]
+    emit("user_stop_typing", {"username": username}, room=room, include_self=False)
 
-@socketio.on('sync_video')
+
+@socketio.on("sync_video")
 def on_sync_video(data):
-    room = data['room']
-    emit('video_event', data, room=room, include_self=False)
+    room = data["room"]
+    emit("video_event", data, room=room, include_self=False)
 
-@socketio.on('on_screen_text')
+
+@socketio.on("on_screen_text")
 def on_screen_text(data):
-    room = data['room']
-    emit('danmaku', data, room=room)
+    room = data["room"]
+    emit("danmaku", data, room=room)
 
-@socketio.on('reaction')
+
+@socketio.on("reaction")
 def on_reaction(data):
-    room = data['room']
-    emit('reaction_burst', data, room=room)
+    room = data["room"]
+    emit("reaction_burst", data, room=room)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     socketio.run(app, debug=True)

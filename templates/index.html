@@ -29,6 +29,7 @@
         {% if user %}
         <p style="color: var(--text-muted); margin-bottom: 30px;">Set up a private or public room to watch your favorite movies with friends. Select a title from our library to get started.</p>
         <form action="{{ url_for('create_room') }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                 <div>
                     <label for="room_name">Room Name</label>
@@ -108,6 +109,7 @@
     <h2 class="section-title">📅 Schedule a Future Party</h2>
     <div class="card" style="max-width: 600px; margin: 0 auto;">
         <form action="{{ url_for('schedule_party') }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                 <div>
                     <label>Party Name</label>

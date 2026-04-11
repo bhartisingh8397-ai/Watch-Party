@@ -8,6 +8,7 @@
             Your email will be verified through Google
         </p>
         <form action="{{ url_for('signup') }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="form-group">
                 <label for="username">Choose Username</label>
                 <input type="text" name="username" placeholder="Pick a unique username" required>
@@ -26,7 +27,7 @@
             <span>OR</span>
         </div>
 
-        <a href="{{ url_for('login_google') }}" class="btn btn-primary" style="width: 100; display: block; text-align: center;">
+        <a href="{{ url_for('login_google') }}" class="btn btn-primary" style="width: 100%; display: block; text-align: center;">
             Already have an account? Sign in with Google
         </a>
 
