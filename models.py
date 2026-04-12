@@ -10,6 +10,7 @@ class User(db.Model):
     username = db.Column(db.String(120), unique=True, nullable=False)
     name = db.Column(db.String(100), nullable=True)
     email = db.Column(db.String(120), unique=True, nullable=False)
+    email_verified = db.Column(db.Boolean, default=False)
     password_hash = db.Column(db.String(128), nullable=True)
     google_id = db.Column(db.String(120), unique=True, nullable=True)
     is_blocked = db.Column(db.Boolean, default=False)
@@ -34,6 +35,19 @@ class User(db.Model):
         if not self.ratings:
             return 0
         return round(sum(r.score for r in self.ratings) / len(self.ratings), 1)
+
+    @property
+    def masked_email(self):
+        """Return masked email for display."""
+        if not self.email:
+            return None
+        parts = self.email.split("@")
+        if len(parts) != 2:
+            return self.email
+        local = parts[0]
+        if len(local) <= 2:
+            return local[0] + "***@" + parts[1]
+        return local[:2] + "***@" + parts[1]
 
 
 class Video(db.Model):

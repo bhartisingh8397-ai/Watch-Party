@@ -2,40 +2,276 @@
 
 {% block content %}
 <section class="auth-section">
-    <div class="auth-card">
-        <h1>Sign Up</h1>
-        <p style="text-align: center; color: var(--text-muted); margin-bottom: 25px; font-size: 0.9rem;">
-            Your email will be verified through Google
-        </p>
-        <form action="{{ url_for('signup') }}" method="POST">
+    <div class="auth-card fade-in">
+        <h1>Create Account</h1>
+        <p class="auth-subtitle">Join WatchParty — start watching with friends</p>
+
+        <!-- Google Sign Up -->
+        <a href="{{ url_for('login_google') }}" class="btn-google">
+            <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"/><path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"/><path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z"/><path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.087 5.571l.003-.002 6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z"/></svg>
+            Continue with Google
+        </a>
+
+        <div class="auth-divider"><span>OR</span></div>
+
+        <form action="{{ url_for('signup') }}" method="POST" id="signupForm">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+
             <div class="form-group">
                 <label for="name">Full Name</label>
-                <input type="text" name="name" placeholder="Enter your full name" required autocomplete="off">
+                <input type="text" name="name" id="signupName" placeholder="Your full name" required autocomplete="name">
             </div>
+
+            <!-- STEP 1: Email Entry -->
+            <div id="emailStep" class="form-group">
+                <label for="email">Email Address <span style="color: var(--primary); font-size: 0.7rem;">*REQUIRED</span></label>
+                <div class="email-input-group">
+                    <input type="email" name="email" id="signupEmail" placeholder="your@email.com" required autocomplete="email" style="flex: 1;">
+                    <button type="button" id="sendOtpBtn" class="btn-send-otp" onclick="sendOTP()">Send OTP</button>
+                </div>
+                <p id="emailHint" style="font-size: 0.78rem; color: var(--text-muted); margin-top: -10px;">We'll send a verification code to this email</p>
+            </div>
+
+            <!-- STEP 2: OTP Entry (hidden until OTP sent) -->
+            <div id="otpSection" class="otp-section" style="display: none;">
+                <h3 style="font-size: 0.95rem; font-weight: 700; text-align: center; margin-bottom: 4px; display:flex; align-items:center; justify-content:center; gap:6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg> Enter OTP to Verify</h3>
+                <p style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 16px; text-align: center;">
+                    6-digit code sent to <strong id="otpEmailDisplay">your email</strong>
+                </p>
+                <div class="otp-input-group">
+                    <input type="text" class="otp-digit" maxlength="1" inputmode="numeric" autocomplete="one-time-code" data-index="0">
+                    <input type="text" class="otp-digit" maxlength="1" inputmode="numeric" data-index="1">
+                    <input type="text" class="otp-digit" maxlength="1" inputmode="numeric" data-index="2">
+                    <input type="text" class="otp-digit" maxlength="1" inputmode="numeric" data-index="3">
+                    <input type="text" class="otp-digit" maxlength="1" inputmode="numeric" data-index="4">
+                    <input type="text" class="otp-digit" maxlength="1" inputmode="numeric" data-index="5">
+                </div>
+                <div style="display: flex; gap: 8px; justify-content: center; margin-top: 12px;">
+                    <button type="button" id="verifyOtpBtn" class="btn btn-primary btn-sm" onclick="verifyOTP()">Verify OTP</button>
+                    <button type="button" id="resendOtpBtn" class="btn btn-secondary btn-sm" onclick="sendOTP()" disabled>Resend OTP</button>
+                </div>
+                <p id="otpStatus" class="otp-status"></p>
+            </div>
+
+            <!-- STEP 3: Email verified badge (hidden until verified) -->
+            <div id="emailVerified" style="display: none; padding: 14px; background: rgba(70, 211, 105, 0.08); border: 1px solid rgba(70, 211, 105, 0.2); border-radius: 10px; margin-bottom: 16px; text-align: center;">
+                <span style="color: var(--success); font-weight: 700; font-size: 0.92rem;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:-3px; margin-right:4px;"><polyline points="20 6 9 17 4 12"></polyline></svg> Email verified successfully!</span>
+                <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 4px;">You can now create your account</p>
+            </div>
+
             <div class="form-group">
-                <label for="email">Email Address</label>
-                <input type="email" name="email" placeholder="Enter your email" required autocomplete="off">
+                <label for="password">Password</label>
+                <input type="password" name="password" placeholder="Min 6 characters" required autocomplete="new-password" minlength="6">
             </div>
-            <div class="form-group">
-                <label for="password">Create Password</label>
-                <input type="password" name="password" placeholder="Enter password" required autocomplete="off">
-            </div>
-            <button type="submit" class="btn btn-google" style="margin-top: 10px;">
-                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" width="18">
-                Verify & Sign Up with Google
+
+            <button type="submit" id="signupSubmitBtn" class="btn btn-primary" style="width: 100%; opacity: 0.5; cursor: not-allowed;" disabled>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:-4px; margin-right:6px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg> Verify Email to Create Account
             </button>
         </form>
 
-        <div class="auth-divider">
-            <span>OR</span>
-        </div>
-
-        <a href="{{ url_for('login_google') }}" class="btn btn-primary" style="width: 100%; display: block; text-align: center;">
-            Already have an account? Sign in with Google
-        </a>
-
-        <p>Already have an account? <a href="{{ url_for('login') }}">Sign in.</a></p>
+        <p>Already have an account? <a href="{{ url_for('login') }}">Sign In</a></p>
     </div>
 </section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const CSRF_TOKEN = '{{ csrf_token() }}';
+let emailVerified = false;
+let otpCooldown = 0;
+
+// ===== OTP DIGIT INPUTS =====
+const otpDigits = document.querySelectorAll('.otp-digit');
+
+otpDigits.forEach((input, idx) => {
+    // Move to next on input
+    input.addEventListener('input', () => {
+        input.value = input.value.replace(/[^0-9]/g, '');
+        if (input.value.length === 1 && idx < otpDigits.length - 1) {
+            otpDigits[idx + 1].focus();
+        }
+        // Auto-verify when all 6 digits filled
+        if (idx === otpDigits.length - 1 && input.value.length === 1) {
+            const otp = Array.from(otpDigits).map(d => d.value).join('');
+            if (otp.length === 6) {
+                setTimeout(() => verifyOTP(), 200);
+            }
+        }
+    });
+    // Move back on backspace
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Backspace' && !input.value && idx > 0) {
+            otpDigits[idx - 1].focus();
+        }
+    });
+    // Handle paste
+    input.addEventListener('paste', (e) => {
+        e.preventDefault();
+        const pasteData = (e.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, 6);
+        pasteData.split('').forEach((char, i) => {
+            if (otpDigits[i]) otpDigits[i].value = char;
+        });
+        if (pasteData.length === 6) {
+            otpDigits[5].focus();
+            setTimeout(() => verifyOTP(), 200);
+        }
+    });
+});
+
+// ===== SEND OTP =====
+async function sendOTP() {
+    const email = document.getElementById('signupEmail').value.trim();
+    const btn = document.getElementById('sendOtpBtn');
+    const statusEl = document.getElementById('otpStatus');
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        showStatus('Enter a valid email address.', 'error');
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+
+    try {
+        const resp = await fetch('/api/send-otp', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': CSRF_TOKEN
+            },
+            body: JSON.stringify({ email: email, context: 'signup' })
+        });
+        const data = await resp.json();
+
+        if (data.success) {
+            document.getElementById('otpSection').style.display = 'block';
+            document.getElementById('otpEmailDisplay').textContent = email;
+            otpDigits[0].focus();
+            showStatus('OTP sent! Check your email.', 'success');
+            startCooldown(30);
+        } else {
+            showStatus(data.error || 'Failed to send OTP. Please try again.', 'error');
+            btn.disabled = false;
+            btn.textContent = 'Send OTP';
+        }
+    } catch (err) {
+        console.error('Send OTP error:', err);
+        showStatus('Network error. Please check your connection and try again.', 'error');
+        btn.disabled = false;
+        btn.textContent = 'Send OTP';
+    }
+}
+
+// ===== VERIFY OTP =====
+async function verifyOTP() {
+    const email = document.getElementById('signupEmail').value.trim();
+    const otp = Array.from(otpDigits).map(d => d.value).join('');
+    const verifyBtn = document.getElementById('verifyOtpBtn');
+
+    if (otp.length !== 6) {
+        showStatus('Please enter all 6 digits.', 'error');
+        return;
+    }
+
+    verifyBtn.disabled = true;
+    verifyBtn.textContent = 'Verifying...';
+
+    try {
+        const resp = await fetch('/api/verify-otp', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': CSRF_TOKEN
+            },
+            body: JSON.stringify({ email: email, otp: otp })
+        });
+        const data = await resp.json();
+
+        if (data.success) {
+            emailVerified = true;
+            // Hide OTP section, show success badge
+            document.getElementById('otpSection').style.display = 'none';
+            document.getElementById('emailVerified').style.display = 'block';
+            // Lock phone input
+            document.getElementById('signupEmail').readOnly = true;
+            document.getElementById('signupEmail').style.opacity = '0.6';
+            document.getElementById('sendOtpBtn').style.display = 'none';
+            document.getElementById('emailHint').style.display = 'none';
+            // Enable submit button
+            const submitBtn = document.getElementById('signupSubmitBtn');
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Create Account';
+            submitBtn.style.opacity = '1';
+            submitBtn.style.cursor = 'pointer';
+        } else {
+            showStatus(data.error || 'Invalid OTP. Please try again.', 'error');
+            verifyBtn.disabled = false;
+            verifyBtn.textContent = 'Verify OTP';
+            // Clear OTP inputs for retry
+            otpDigits.forEach(d => d.value = '');
+            otpDigits[0].focus();
+        }
+    } catch (err) {
+        console.error('Verify OTP error:', err);
+        showStatus('Network error. Please try again.', 'error');
+        verifyBtn.disabled = false;
+        verifyBtn.textContent = 'Verify OTP';
+    }
+}
+
+// ===== COOLDOWN TIMER =====
+function startCooldown(seconds) {
+    const sendBtn = document.getElementById('sendOtpBtn');
+    const resendBtn = document.getElementById('resendOtpBtn');
+    otpCooldown = seconds;
+    sendBtn.disabled = true;
+    resendBtn.disabled = true;
+
+    const interval = setInterval(() => {
+        otpCooldown--;
+        sendBtn.textContent = `Wait (${otpCooldown}s)`;
+        resendBtn.textContent = `Resend (${otpCooldown}s)`;
+        if (otpCooldown <= 0) {
+            clearInterval(interval);
+            sendBtn.textContent = 'Resend OTP';
+            sendBtn.disabled = false;
+            resendBtn.textContent = 'Resend OTP';
+            resendBtn.disabled = false;
+        }
+    }, 1000);
+}
+
+// ===== STATUS HELPER =====
+function showStatus(msg, type) {
+    const el = document.getElementById('otpStatus');
+    el.textContent = msg;
+    el.className = 'otp-status ' + type;
+    // Also ensure OTP section is visible for error messages
+    if (type === 'error' && document.getElementById('otpSection').style.display === 'none') {
+        // Show hint under phone input instead
+        const hint = document.getElementById('emailHint');
+        if (hint) {
+            hint.textContent = msg;
+            hint.style.color = 'var(--danger)';
+        }
+    }
+}
+
+// ===== PREVENT SUBMIT WITHOUT VERIFICATION =====
+document.getElementById('signupForm').addEventListener('submit', (e) => {
+    if (!emailVerified) {
+        e.preventDefault();
+        if (document.getElementById('otpSection').style.display === 'none') {
+            showStatus('', 'error');
+            const hint = document.getElementById('emailHint');
+            hint.textContent = 'Please click "Send OTP" and verify your email address first.';
+            hint.style.color = 'var(--danger)';
+            hint.style.fontWeight = '600';
+        } else {
+            showStatus('Please enter and verify the OTP sent to your email.', 'error');
+        }
+    }
+});
+</script>
 {% endblock %}

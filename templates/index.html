@@ -1,177 +1,165 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="hero-wrapper">
-    <div class="hero-content">
-        <div class="hero">
-            <h1>Experience Movies <span>Together, Anytime.</span></h1>
-            <p>Join millions of fans watching their favorite stories synchronized in real-time. Chat, react, and feel the cinema vibe from your home.</p>
-            <div class="hero-actions">
-                <a href="#join" class="btn btn-primary">Join a Party</a>
-                {% if user %}
-                <a href="#create" class="btn btn-secondary">Host Your Own</a>
-                {% else %}
-                <a href="{{ url_for('login') }}" class="btn btn-secondary">Login to Host</a>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-    <div class="hero-visuals">
-        <div class="hero-visuals-container">
-            <img src="{{ url_for('static', filename='images/prime_video_hero_posters_v2_1775479016384.png') }}" class="hero-collage" alt="Movies Collage">
-        </div>
-    </div>
+<!-- Dashboard Hero -->
+<section class="dashboard-hero">
+    <h1>Welcome back, <span>{{ user.name or user.username }}</span></h1>
 </section>
 
-<section id="create" style="padding: 100px 0;">
-    <h2 class="section-title">Host a New Party</h2>
-    <div class="card" style="max-width: 800px; margin: 0 auto;">
-        {% if user %}
-        <p style="color: var(--text-muted); margin-bottom: 30px;">Set up a private or public room to watch your favorite movies with friends. Select a title from our library to get started.</p>
+<!-- Active Rooms -->
+<section style="padding-bottom: 40px;">
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+        <h2 class="section-title" style="margin-bottom: 0;">Active Watch Parties</h2>
+    </div>
+
+    {% if rooms %}
+    <div class="room-grid">
+        {% for room in rooms %}
+        <a href="{{ url_for('room', room_id=room.id) }}" style="text-decoration: none; color: inherit;">
+            <div class="card card-interactive room-card-premium">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                    <h3 style="font-size: 1.1rem; font-weight: 700;">{{ room.name }}</h3>
+                    {% if room.is_private %}
+                    <span class="private-badge"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:-2px; margin-right: 2px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>Private</span>
+                    {% endif %}
+                </div>
+                {% if room.video %}
+                <p style="color: var(--text-secondary); font-size: 0.88rem; margin-bottom: 12px; display: flex; align-items: center; gap: 4px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg> {{ room.video.title }}
+                </p>
+                {% endif %}
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <div style="width: 6px; height: 6px; background: var(--success); border-radius: 50%; box-shadow: 0 0 6px var(--success);"></div>
+                    <span style="font-size: 0.78rem; color: var(--success); font-weight: 600;">Live</span>
+                </div>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card" style="text-align: center; padding: 60px 24px;">
+        <div style="color: var(--text-secondary); opacity: 0.5; margin-bottom: 16px; display: flex; justify-content: center;">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+        </div>
+        <p style="color: var(--text-secondary); margin-bottom: 24px;">No active watch parties right now. Start one!</p>
+    </div>
+    {% endif %}
+</section>
+
+<!-- Create a Room -->
+<section style="padding-bottom: 40px;">
+    <h2 class="section-title">Start a New Watch Party</h2>
+    {% if videos %}
+    <div class="card" style="max-width: 600px;">
         <form action="{{ url_for('create_room') }}" method="POST">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-                <div>
-                    <label for="room_name">Room Name</label>
-                    <input type="text" id="room_name" name="room_name" placeholder="e.g. Friday Night Action" required>
-                </div>
-                <div>
-                    <label for="video_id">Select Feature Movie</label>
-                    <select id="video_id" name="video_id" required>
-                        <option value="" disabled selected>Choose a movie...</option>
-                        {% for video in videos %}
-                        <option value="{{ video.id }}">{{ video.title }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
+            <div class="form-group">
+                <label for="room_name">Room Name</label>
+                <input type="text" name="room_name" placeholder="Friday Movie Night" required>
             </div>
-            
-            <!-- Private Room Toggle -->
-            <div class="private-room-toggle" style="margin-top: 20px;">
-                <div style="display: flex; align-items: center; gap: 12px; padding: 15px; background: rgba(255,255,255,0.05); border-radius: 8px; border: 1px solid var(--glass-border);">
-                    <input type="checkbox" id="enablePassword" onchange="document.getElementById('passwordField').style.display = this.checked ? 'block' : 'none'">
-                    <div>
-                        <label for="enablePassword" style="cursor: pointer; margin: 0; font-weight: 700; color: white;">🔒 Make Private Room</label>
-                        <p style="font-size: 0.8rem; color: var(--text-muted); margin: 2px 0 0 0;">Only users with the password can join</p>
-                    </div>
-                </div>
-                <div id="passwordField" style="display: none; margin-top: 10px;">
-                    <label for="room_password">Room Password</label>
-                    <input type="text" name="room_password" id="room_password" placeholder="Set a room password">
-                </div>
+            <div class="form-group">
+                <label for="video_id">Select Movie</label>
+                <select name="video_id" required>
+                    {% for v in videos %}
+                    <option value="{{ v.id }}">{{ v.title }}</option>
+                    {% endfor %}
+                </select>
             </div>
-            
-            <div style="margin-top: 20px; margin-bottom: 30px; display: flex; align-items: center; gap: 10px; padding: 15px; background: rgba(255,255,255,0.05); border-radius: 4px;">
-                <span style="font-size: 1.2rem;">🎬</span>
-                <p style="font-size: 0.9rem; color: var(--text-muted); margin: 0;">
-                    Can't find your movie? <a href="{{ url_for('admin_login') }}" style="color: var(--primary); font-weight: 600;">Upload new content</a> via the professional dashboard.
-                </p>
+            <div class="form-group">
+                <label for="room_password">Room Password (optional — makes it private)</label>
+                <input type="password" name="room_password" placeholder="Leave empty for public room">
             </div>
-            
-            <button type="submit" class="btn btn-primary" style="width: 100%;">Create Party Room</button>
+            <button type="submit" class="btn btn-primary" style="width: 100%;">Create Watch Party</button>
         </form>
-        {% else %}
-        <div style="text-align: center; padding: 40px;">
-            <p style="font-size: 1.2rem; color: var(--text-muted); margin-bottom: 20px;">🔒 You need to be logged in to host a watch party.</p>
-            <a href="{{ url_for('login') }}" class="btn btn-primary">Sign In</a>
-            <a href="{{ url_for('signup') }}" class="btn btn-secondary" style="margin-left: 10px;">Sign Up</a>
-        </div>
-        {% endif %}
     </div>
+    {% else %}
+    <div class="card" style="text-align: center; padding: 40px;">
+        <p style="color: var(--text-muted);">No movies in the library yet. Ask the admin to upload some!</p>
+    </div>
+    {% endif %}
 </section>
 
 <!-- Scheduled Parties -->
 {% if scheduled_parties %}
-<section style="padding: 60px 0;">
-    <h2 class="section-title">📅 Upcoming Watch Parties</h2>
+<section style="padding-bottom: 60px;">
+    <h2 class="section-title">Upcoming Watch Parties</h2>
     <div class="scheduled-grid">
-        {% for sp in scheduled_parties %}
-        <div class="card scheduled-card">
+        {% for party in scheduled_parties %}
+        <div class="card scheduled-card" style="position: relative;">
             <div class="scheduled-info">
-                <h3>{{ sp.name }}</h3>
-                <p style="color: var(--primary); font-weight: 700; font-size: 0.9rem;">🎬 {{ sp.video.title }}</p>
-                <p style="color: var(--text-muted); font-size: 0.85rem;">Hosted by <strong>{{ sp.creator.username }}</strong></p>
+                <h3>{{ party.name }}</h3>
+                <p style="font-size: 0.85rem; color: var(--text-muted); display: flex; align-items: center; gap: 4px;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg> {{ party.video.title }} • by {{ party.creator.username }}
+                </p>
+                <p style="font-size: 0.82rem; color: var(--text-muted); margin-top: 4px; display: flex; align-items: center; gap: 4px;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg> {{ party.scheduled_at.strftime('%d %b %Y • %I:%M %p') }}
+                </p>
             </div>
-            <div class="scheduled-time" data-time="{{ sp.scheduled_at.isoformat() }}">
-                <span class="countdown-badge">
-                    {{ sp.scheduled_at.strftime('%d %b • %I:%M %p') }}
-                </span>
-            </div>
+            <span class="countdown-badge" data-time="{{ party.scheduled_at.isoformat() }}">
+                Loading...
+            </span>
         </div>
         {% endfor %}
     </div>
 </section>
 {% endif %}
 
-<!-- Schedule a Party Form -->
-{% if user %}
-<section style="padding: 60px 0;">
-    <h2 class="section-title">📅 Schedule a Future Party</h2>
-    <div class="card" style="max-width: 600px; margin: 0 auto;">
+<!-- Schedule Party Form -->
+{% if videos %}
+<section style="padding-bottom: 60px;">
+    <h2 class="section-title">Schedule a Watch Party</h2>
+    <div class="card" style="max-width: 600px;">
         <form action="{{ url_for('schedule_party') }}" method="POST">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                <div>
-                    <label>Party Name</label>
-                    <input type="text" name="party_name" placeholder="Movie Night!" required>
-                </div>
-                <div>
-                    <label>Select Movie</label>
-                    <select name="video_id" required>
-                        <option value="" disabled selected>Choose...</option>
-                        {% for video in videos %}
-                        <option value="{{ video.id }}">{{ video.title }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
+            <div class="form-group">
+                <label for="party_name">Party Name</label>
+                <input type="text" name="party_name" placeholder="Weekend Horror Night" required>
             </div>
-            <div style="margin-top: 15px;">
-                <label>Date & Time</label>
+            <div class="form-group">
+                <label for="video_id">Select Movie</label>
+                <select name="video_id" required>
+                    {% for v in videos %}
+                    <option value="{{ v.id }}">{{ v.title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="scheduled_at">Date & Time</label>
                 <input type="datetime-local" name="scheduled_at" required>
             </div>
-            <button type="submit" class="btn btn-secondary" style="width: 100%; margin-top: 15px;">Schedule Party 📅</button>
+            <button type="submit" class="btn btn-secondary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;"><span>Schedule Party</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg></button>
         </form>
     </div>
 </section>
 {% endif %}
 
-<section id="join" style="padding: 100px 0;">
-    <h2 class="section-title">Active Watch Parties</h2>
-    {% if rooms %}
-    <div class="room-grid">
-        {% for room in rooms %}
-        <div class="card room-card-premium">
-            <div style="position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: var(--primary);"></div>
-            <div style="padding: 10px;">
-                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                    <h3 style="font-size: 1.4rem; color: white; margin: 0;">{{ room.name }}</h3>
-                    {% if room.is_private %}
-                    <span class="private-badge">🔒</span>
-                    {% endif %}
-                </div>
-                {% if room.video %}
-                <p style="color: var(--primary); font-size: 0.85rem; margin-bottom: 5px; font-weight: 600;">🎬 {{ room.video.title }}</p>
-                {% endif %}
-                <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px;">
-                    Room ID: <span style="color: var(--primary); font-family: monospace; font-weight: 800;">{{ room.id }}</span>
-                </p>
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-top: auto;">
-                    <span style="font-size: 0.75rem; color: var(--primary); font-weight: 800; background: rgba(26,152,255,0.1); padding: 4px 10px; border-radius: 20px; border: 1px solid var(--primary);">LIVE NOW</span>
-                    {% if user %}
-                    <a href="{{ url_for('room', room_id=room.id) }}" class="btn btn-primary" style="padding: 8px 16px; font-size: 0.85rem;">Join Now</a>
-                    {% else %}
-                    <a href="{{ url_for('login') }}" class="btn btn-secondary" style="padding: 8px 16px; font-size: 0.85rem;">Login to Join</a>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-    {% else %}
-    <div class="card" style="text-align: center; padding: 60px;">
-        <p style="font-size: 1.1rem; color: var(--text-muted);">No parties are currently active. Be the first to start the show!</p>
-        <a href="#create" class="btn btn-secondary" style="margin-top: 20px;">Host a Party</a>
-    </div>
-    {% endif %}
-</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Countdown for scheduled parties
+function updateCountdowns() {
+    document.querySelectorAll('.countdown-badge[data-time]').forEach(badge => {
+        const targetTime = new Date(badge.dataset.time);
+        const now = new Date();
+        const diff = targetTime - now;
+
+        if (diff <= 0) {
+            badge.textContent = 'Starting Now!';
+            badge.style.background = 'rgba(229, 9, 20, 0.15)';
+        } else {
+            const hours = Math.floor(diff / 3600000);
+            const mins = Math.floor((diff % 3600000) / 60000);
+            if (hours > 24) {
+                const days = Math.floor(hours / 24);
+                badge.textContent = `${days}d ${hours % 24}h`;
+            } else {
+                badge.textContent = `${hours}h ${mins}m`;
+            }
+        }
+    });
+}
+updateCountdowns();
+setInterval(updateCountdowns, 60000);
+</script>
 {% endblock %}

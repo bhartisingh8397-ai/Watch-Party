@@ -2,20 +2,46 @@
 
 {% block content %}
 <div class="card">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <div class="admin-header-row">
         <div>
-            <h2>Admin Dashboard - Video Management</h2>
-            <p style="color: #888;">Upload and manage videos that users can choose for their Watch Parties.</p>
+            <h2>Admin Dashboard</h2>
+            <p class="admin-subtitle">Final moderation panel for launch checks: content, users, and room activity.</p>
         </div>
         <form action="{{ url_for('admin_logout') }}" method="POST" style="margin: 0;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="btn btn-danger" style="background: #ff4b2b; padding: 10px 20px; font-size: 0.9rem; font-weight: 800; white-space: nowrap;">
-                🚪 Admin Logout
-            </button>
+            <button type="submit" class="btn btn-secondary btn-sm">Admin Logout</button>
         </form>
     </div>
+
+    <div class="admin-kpi-grid">
+        <div class="admin-kpi-card">
+            <span class="admin-kpi-label">Videos</span>
+            <strong class="admin-kpi-value">{{ admin_stats.total_videos }}</strong>
+            <small>{{ admin_stats.total_ratings }} ratings total</small>
+        </div>
+        <div class="admin-kpi-card">
+            <span class="admin-kpi-label">Rooms</span>
+            <strong class="admin-kpi-value">{{ admin_stats.total_rooms }}</strong>
+            <small>{{ admin_stats.private_rooms }} private</small>
+        </div>
+        <div class="admin-kpi-card">
+            <span class="admin-kpi-label">Users</span>
+            <strong class="admin-kpi-value">{{ admin_stats.total_users }}</strong>
+            <small>{{ admin_stats.blocked_users }} blocked</small>
+        </div>
+        <div class="admin-kpi-card">
+            <span class="admin-kpi-label">Watching Now</span>
+            <strong class="admin-kpi-value">{{ admin_stats.watching_now }}</strong>
+            <small>{{ admin_stats.unread_messages }} unread messages</small>
+        </div>
+        <div class="admin-kpi-card">
+            <span class="admin-kpi-label">Avg Rating</span>
+            <strong class="admin-kpi-value">{{ admin_stats.avg_rating }}/5</strong>
+            <small>All movies combined</small>
+        </div>
+    </div>
     
-    <div class="upload-section card" style="background: rgba(0,0,0,0.3);">
+    <div class="upload-section card admin-upload-card">
         <h3>Upload New Video</h3>
         <form action="{{ url_for('admin') }}" method="POST" enctype="multipart/form-data">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -45,59 +71,77 @@
     </div>
 
     <div class="video-list">
-        <h3>Existing Videos</h3>
+        <h3>Library Inventory</h3>
         {% if videos %}
-        <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
-            <thead>
-                <tr style="text-align: left; border-bottom: 1px solid var(--glass-border);">
-                    <th style="padding: 10px;">ID</th>
-                    <th style="padding: 10px;">Title</th>
-                    <th style="padding: 10px;">Filename</th>
-                    <th style="padding: 10px;">Poster</th>
-                    <th style="padding: 10px;">Subtitles</th>
-                    <th style="padding: 10px;">Upload Date</th>
-                    <th style="padding: 10px; text-align: right;">Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for video in videos %}
-                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
-                    <td style="padding: 10px;">{{ video.id }}</td>
-                    <td style="padding: 10px;">{{ video.title }}</td>
-                    <td style="padding: 10px;">{{ video.filename }}</td>
-                    <td style="padding: 10px;">
-                        {% if video.poster_filename %}
-                        <img src="{{ url_for('static', filename='uploads/' + video.poster_filename) }}" alt="Poster" style="width: 50px; height: 75px; object-fit: cover; border-radius: 8px; border: 1px solid var(--primary); box-shadow: 0 4px 10px rgba(0,0,0,0.3);">
-                        {% else %}
-                        <img src="{{ url_for('static', filename='images/poster_dummy_png_1775502805003.png') }}" alt="No Poster" style="width: 50px; height: 75px; object-fit: cover; border-radius: 8px; opacity: 0.3;">
-                        {% endif %}
-                    </td>
-                    <td style="padding: 10px;">
-                        {% if video.subtitle_filename %}
-                        <span style="color: #2ecc71; font-weight: 800; font-size: 0.85rem;">✅ Active (.vtt)</span>
-                        <form action="{{ url_for('delete_subtitle', video_id=video.id) }}" method="POST" style="display: inline; margin-left: 8px;">
+        <div class="admin-table-wrap">
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Poster</th>
+                        <th>Title</th>
+                        <th>File</th>
+                        <th>Size</th>
+                        <th>Rating</th>
+                        <th>Subtitles</th>
+                        <th>Uploaded</th>
+                        <th style="text-align: right;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in video_rows %}
+                    {% set video = row.video %}
+                    <tr>
+                        <td>{{ video.id }}</td>
+                        <td>
+                            <div class="admin-poster-shell">
+                                {% if video.poster_filename %}
+                                <img src="{{ url_for('static', filename='uploads/' + video.poster_filename) }}" alt="Poster" class="admin-poster-thumb" data-smart-thumb data-thumb-ratio="0.67">
+                                {% else %}
+                                <img src="{{ url_for('static', filename='images/poster_dummy_png_1775502805003.png') }}" alt="No Poster" class="admin-poster-thumb is-fallback" data-smart-thumb data-thumb-ratio="0.67">
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            <strong>{{ video.title }}</strong>
+                            <div class="admin-file-meta">{{ video.genre if video.genre else 'Uncategorized' }}</div>
+                        </td>
+                        <td><code>{{ video.filename }}</code></td>
+                        <td>{{ row.file_size }}</td>
+                        <td>
+                            {% if video.rating_count() > 0 %}
+                            <span class="status-badge status-live">{{ video.avg_rating() }}/5</span>
+                            {% else %}
+                            <span class="status-badge status-offline">No ratings</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if video.subtitle_filename %}
+                            <span style="color: #2ecc71; font-weight: 800; font-size: 0.85rem;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:-1px; margin-right:4px;"><polyline points="20 6 9 17 4 12"></polyline></svg>Active</span>
+                            <form action="{{ url_for('delete_subtitle', video_id=video.id) }}" method="POST" style="display: inline; margin-left: 8px;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button type="submit" style="background: none; border: none; color: #ff4b2b; cursor: pointer; font-size: 1.2rem;" title="Remove Subtitles">×</button>
-                        </form>
-                        {% else %}
-                        <form action="{{ url_for('upload_subtitle', video_id=video.id) }}" method="POST" enctype="multipart/form-data" style="display: flex; gap: 5px; align-items: center;">
+                                <button type="submit" style="background: none; border: none; color: #ff4b2b; cursor: pointer; font-size: 1.2rem;" title="Remove Subtitles">×</button>
+                            </form>
+                            {% else %}
+                            <form action="{{ url_for('upload_subtitle', video_id=video.id) }}" method="POST" enctype="multipart/form-data" style="display: flex; gap: 5px; align-items: center;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <input type="file" name="subtitle" accept=".srt,.vtt" style="font-size: 0.7rem; width: 120px;" required>
-                            <button type="submit" class="btn-sm" style="padding: 2px 8px; font-size: 0.7rem; background: var(--primary); color: black; border: none; border-radius: 3px; font-weight: 800;">Add</button>
-                        </form>
-                        {% endif %}
-                    </td>
-                    <td style="padding: 10px;">{{ video.upload_date.strftime('%Y-%m-%d') }}</td>
-                    <td style="padding: 10px; text-align: right;">
-                        <form action="{{ url_for('delete_video', video_id=video.id) }}" method="POST" onsubmit="return confirm('⚠️ PERMANENT DELETE: Are you sure you want to remove this movie and its files from the server?');" style="margin: 0;">
+                                <input type="file" name="subtitle" accept=".srt,.vtt" style="font-size: 0.7rem; width: 120px;" required>
+                                <button type="submit" class="btn-sm" style="padding: 2px 8px; font-size: 0.7rem; background: var(--primary); color: black; border: none; border-radius: 3px; font-weight: 800;">Add</button>
+                            </form>
+                            {% endif %}
+                        </td>
+                        <td>{{ video.upload_date.strftime('%Y-%m-%d') }}</td>
+                        <td style="text-align: right;">
+                            <form action="{{ url_for('delete_video', video_id=video.id) }}" method="POST" onsubmit="return confirm('PERMANENT DELETE: Are you sure you want to remove this movie and its files from the server?');" style="margin: 0;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button type="submit" class="btn btn-danger btn-sm" style="background: #ff4b2b; padding: 6px 12px; font-size: 0.8rem; font-weight: 800;">Delete</button>
-                        </form>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                                <button type="submit" class="btn btn-danger btn-sm" style="background: #ff4b2b; padding: 6px 12px; font-size: 0.8rem; font-weight: 800;">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
         {% else %}
         <p style="margin-top: 10px;">No videos uploaded yet.</p>
         {% endif %}
@@ -108,7 +152,7 @@
 <div class="card" style="margin-top: 30px;">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
         <div>
-            <h2>👥 User Management</h2>
+            <h2><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:-4px; margin-right:8px;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>User Management</h2>
             <p style="color: #888;">View all registered users, see who's watching what, and manage access.</p>
         </div>
         <div style="display: flex; gap: 15px; align-items: center;">
@@ -149,7 +193,7 @@
                         </div>
                     </div>
                 </td>
-                <td style="color: var(--text-muted);">{{ u.email }}</td>
+                <td style="color: var(--text-muted);">{{ u.email or '—' }}</td>
                 <td style="color: var(--text-muted);">{{ u.created_at.strftime('%d %b %Y') }}</td>
                 <td>
                     {% if u.is_blocked %}
@@ -171,7 +215,7 @@
                 <td>
                     {% if u.username in active_watching %}
                     <div class="watching-info">
-                        <span class="watching-movie-icon">🎬</span>
+                        <span class="watching-movie-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg></span>
                         <div>
                             <span class="watching-movie-title">{{ active_watching[u.username].movie }}</span>
                             <span class="watching-room-code">Room: {{ active_watching[u.username].room_id }}</span>
@@ -191,7 +235,7 @@
                         </button>
                     </form>
                     {% else %}
-                    <form action="{{ url_for('block_user', user_id=u.id) }}" method="POST" style="margin: 0; display: inline;" onsubmit="return confirm('⚠️ Block user {{ u.username }}? They will be logged out and unable to sign in.');">
+                    <form action="{{ url_for('block_user', user_id=u.id) }}" method="POST" style="margin: 0; display: inline;" onsubmit="return confirm('Block user {{ u.username }}? They will be logged out and unable to sign in.');">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button type="submit" class="btn-admin btn-block">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
@@ -213,7 +257,7 @@
 <div class="card" style="margin-top: 30px;">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
         <div>
-            <h2>📬 Contact Messages</h2>
+            <h2><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:-4px; margin-right:8px;"><path d="M22 17a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9.5C2 7 4 5 6.5 5H18c2.2 0 4 1.8 4 4v8Z"></path><polyline points="15,9 18,9 18,11"></polyline><path d="M6.5 5C9 5 11 7 11 9.5V17a2 2 0 0 1-2 2v0"></path><line x1="6" y1="10" x2="7" y2="10"></line></svg>Contact Messages</h2>
             <p style="color: #888;">Messages received from the Contact Us page.</p>
         </div>
         <div style="display: flex; gap: 15px; align-items: center;">
@@ -250,11 +294,11 @@
                 </div>
                 <div style="text-align: right;">
                     <span style="color: var(--primary); font-size: 0.78rem; font-weight: 700; text-transform: uppercase;">
-                        {% if msg.subject == 'general' %}💬 General
-                        {% elif msg.subject == 'bug' %}🐛 Bug Report
-                        {% elif msg.subject == 'feature' %}💡 Feature Request
-                        {% elif msg.subject == 'partnership' %}🤝 Partnership
-                        {% elif msg.subject == 'support' %}🛠️ Support
+                        {% if msg.subject == 'general' %}General
+                        {% elif msg.subject == 'bug' %}Bug Report
+                        {% elif msg.subject == 'feature' %}Feature Request
+                        {% elif msg.subject == 'partnership' %}Partnership
+                        {% elif msg.subject == 'support' %}Support
                         {% else %}{{ msg.subject }}
                         {% endif %}
                     </span>
@@ -270,16 +314,16 @@
                 <form action="{{ url_for('mark_message_read', msg_id=msg.id) }}" method="POST" style="margin: 0; display: inline;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn-admin btn-unblock" style="font-size: 0.78rem;">
-                        ✅ Mark as Read
+                        Mark as Read
                     </button>
                 </form>
                 {% else %}
-                <span style="color: var(--text-muted); font-size: 0.78rem;">✅ Read</span>
+                <span style="color: var(--text-muted); font-size: 0.78rem;">Read</span>
                 {% endif %}
                 <form action="{{ url_for('delete_message', msg_id=msg.id) }}" method="POST" style="margin: 0; display: inline;" onsubmit="return confirm('Delete this message permanently?');">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn-admin btn-block" style="font-size: 0.78rem;">
-                        🗑️ Delete
+                        Delete
                     </button>
                 </form>
             </div>
@@ -287,7 +331,7 @@
         {% endfor %}
     </div>
     {% else %}
-    <p style="margin-top: 10px; color: var(--text-muted);">📭 No messages yet. When users submit the contact form, their messages will appear here.</p>
+    <p style="margin-top: 10px; color: var(--text-muted);">No messages yet. When users submit the contact form, their messages will appear here.</p>
     {% endif %}
 </div>
 {% endblock %}

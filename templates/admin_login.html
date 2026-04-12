@@ -1,18 +1,28 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="card" style="max-width: 400px; margin: 100px auto;">
-    <h2>Admin Login</h2>
-    <form action="{{ url_for('admin_login') }}" method="POST">
+<section class="auth-section">
+    <div class="auth-card fade-in">
+        <div style="text-align: center; margin-bottom: 24px;">
+            <span style="font-size: 2.5rem; display:inline-block; margin-bottom:8px;"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></span>
+            <h1 style="margin-top: 10px;">Admin Access</h1>
+            <p class="auth-subtitle">Enter your admin credentials</p>
+        </div>
+        <form action="{{ url_for('admin_login') }}" method="POST">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label for="email">Admin Email</label>
-        <input type="email" name="email" placeholder="Enter Admin Email" required style="margin-bottom: 15px;" autocomplete="off">
-        <label for="password">Admin Password</label>
-        <input type="password" name="password" placeholder="Enter Admin Password" required autocomplete="off">
-        <button type="submit" class="btn" style="width: 100%;">Login</button>
-    </form>
-    <p style="margin-top: 20px; font-size: 0.8rem; color: #888; text-align: center;">
-        Use your configured admin credentials.
-    </p>
-</div>
+            <div class="form-group">
+                <label for="email">Admin Email</label>
+                <input type="email" name="email" placeholder="admin@watchparty.com" required autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label for="password">Admin Password</label>
+                <input type="password" name="password" placeholder="Enter admin password" required autocomplete="off">
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: 100%;">Login as Admin</button>
+        </form>
+        <p style="text-align: center; margin-top: 20px; font-size: 0.8rem; color: var(--text-muted);">
+            <a href="{{ url_for('index') }}" style="color: var(--text-muted);">← Back to Home</a>
+        </p>
+    </div>
+</section>
 {% endblock %}

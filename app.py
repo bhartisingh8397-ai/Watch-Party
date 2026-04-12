@@ -1,5 +1,6 @@
 import os
 import re
+import random
 import secrets
 import time
 import uuid
@@ -33,6 +34,7 @@ from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from authlib.integrations.flask_client import OAuth
 from dotenv import load_dotenv
+import requests as http_requests
 
 load_dotenv()
 
@@ -67,6 +69,12 @@ if os.getenv("TRUST_PROXY", "0") == "1":
 app.config["GOOGLE_CLIENT_ID"] = os.getenv("GOOGLE_CLIENT_ID")
 app.config["GOOGLE_CLIENT_SECRET"] = os.getenv("GOOGLE_CLIENT_SECRET")
 
+# Fast2SMS Configuration
+FAST2SMS_API_KEY = os.getenv("FAST2SMS_API_KEY", "")
+FAST2SMS_URL = "https://www.fast2sms.com/dev/bulkV2"
+OTP_EXPIRY_SECONDS = 300  # 5 minutes
+OTP_MAX_REQUESTS = 5  # Max OTP requests per phone per window
+
 oauth = OAuth(app)
 google = oauth.register(
     name="google",
@@ -82,6 +90,7 @@ ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"}
 EMAIL_REGEX = re.compile(
     r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$"
 )
+PHONE_REGEX = re.compile(r"^[6-9]\d{9}$")  # Indian mobile numbers
 AUTH_RATE_LIMIT_WINDOW_SECONDS = 15 * 60
 LOGIN_MAX_ATTEMPTS = 10
 ADMIN_LOGIN_MAX_ATTEMPTS = 6
@@ -108,6 +117,21 @@ def allowed_subtitle(filename):
         "." in filename
         and filename.rsplit(".", 1)[1].lower() in ALLOWED_SUBTITLE_EXTENSIONS
     )
+
+
+def human_file_size(size_bytes):
+    """Return a compact human-readable size string."""
+    if size_bytes <= 0:
+        return "0 B"
+    units = ["B", "KB", "MB", "GB", "TB"]
+    size = float(size_bytes)
+    unit_idx = 0
+    while size >= 1024 and unit_idx < len(units) - 1:
+        size /= 1024
+        unit_idx += 1
+    if unit_idx == 0:
+        return f"{int(size)} {units[unit_idx]}"
+    return f"{size:.1f} {units[unit_idx]}"
 
 
 def srt_to_vtt(srt_path, vtt_path):
@@ -167,7 +191,7 @@ def get_client_ip():
 
 
 def is_strong_password(password):
-    # Removing rules as per user request. Just checking if it's not empty.
+    """Check password is not empty."""
     return len(password) >= 1
 
 
@@ -178,6 +202,24 @@ def is_valid_email(email):
     if len(email) > 254 or ".." in email:
         return False
     return bool(EMAIL_REGEX.fullmatch(email))
+
+
+def is_valid_phone(phone):
+    """Deprecated: Removed phone number validation."""
+    return False
+
+
+def generate_unique_username(name):
+    """Generate a unique username from name."""
+    base = re.sub(r"[^a-z0-9]", "", name.lower())
+    if not base:
+        base = "user"
+    username = base
+    counter = 1
+    while User.query.filter(func.lower(User.username) == username).first():
+        username = f"{base}{counter}"
+        counter += 1
+    return username
 
 
 def _get_csrf_token():
@@ -196,6 +238,10 @@ def inject_csrf_token():
 @app.before_request
 def protect_from_csrf():
     if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
+        return None
+
+    # Skip CSRF for API OTP routes that use JSON
+    if request.path in ["/api/send-otp", "/api/verify-otp"]:
         return None
 
     sent_token = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token")
@@ -232,10 +278,10 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Available themes
 THEMES = {
-    "dark": {"name": "Midnight Dark", "icon": "🌙"},
-    "gold": {"name": "Royal Gold", "icon": "👑"},
-    "neon": {"name": "Neon Cyber", "icon": "💜"},
-    "ocean": {"name": "Deep Ocean", "icon": "🌊"},
+    "dark": {"name": "Midnight Dark", "icon": ""},
+    "gold": {"name": "Royal Gold", "icon": ""},
+    "neon": {"name": "Neon Cyber", "icon": ""},
+    "ocean": {"name": "Deep Ocean", "icon": ""},
 }
 
 
@@ -305,11 +351,12 @@ with app.app_context():
             "bio": "ALTER TABLE user ADD COLUMN bio VARCHAR(300) DEFAULT ''",
             "avatar_filename": "ALTER TABLE user ADD COLUMN avatar_filename VARCHAR(500)",
             "theme": "ALTER TABLE user ADD COLUMN theme VARCHAR(20) DEFAULT 'dark'",
+            "email_verified": "ALTER TABLE user ADD COLUMN email_verified BOOLEAN DEFAULT 0",
         }
         for col_name, sql in migrations.items():
             if col_name not in columns:
                 cursor.execute(sql)
-                print(f"✅ Migration: Added '{col_name}' to user table")
+                print(f"Migration: Added '{col_name}' to user table")
 
         # Room table migrations
         room_columns = [
@@ -322,7 +369,7 @@ with app.app_context():
         for col_name, sql in room_migrations.items():
             if col_name not in room_columns:
                 cursor.execute(sql)
-                print(f"✅ Migration: Added '{col_name}' to room table")
+                print(f"Migration: Added '{col_name}' to room table")
 
         # Video table migrations
         video_columns = [
@@ -335,16 +382,118 @@ with app.app_context():
         for col_name, sql in video_migrations.items():
             if col_name not in video_columns:
                 cursor.execute(sql)
-                print(f"✅ Migration: Added '{col_name}' to video table")
+                print(f"Migration: Added '{col_name}' to video table")
 
         conn.commit()
         conn.close()
+
+
+# ==================== OTP (Email Dummy) ====================
+
+def send_dummy_email_otp(email, otp):
+    """Dummy email OTP sender. Just prints to console."""
+    print(f"\n{'='*40}")
+    print(f"DUMMY EMAIL SENT TO: {email}")
+    print(f"YOUR OTP IS: {otp}")
+    print(f"{'='*40}\n")
+    return True, "OTP sent successfully."
+
+
+@app.route("/api/send-otp", methods=["POST"])
+def api_send_otp():
+    """Send OTP to email for verification."""
+    data = request.get_json()
+    if not data:
+        return jsonify({"success": False, "error": "Invalid request."}), 400
+
+    email = (data.get("email") or "").strip().lower()
+
+    if not is_valid_email(email):
+        return jsonify({"success": False, "error": "Please enter a valid email address."}), 400
+
+    # Rate limit OTP requests
+    rate_key = f"otp:{email}"
+    limited, retry_after = is_rate_limited("otp", email, OTP_MAX_REQUESTS)
+    if limited:
+        return jsonify({"success": False, "error": f"Too many OTP requests. Try again in {retry_after} seconds."}), 429
+
+    # Check if email already registered (for signup context)
+    context = data.get("context", "signup")
+    if context == "signup":
+        existing = User.query.filter_by(email=email).first()
+        if existing:
+            return jsonify({"success": False, "error": "This email is already registered. Please login."}), 400
+
+    # Generate 6-digit OTP
+    otp = str(random.randint(100000, 999999))
+
+    # Send OTP
+    success, message = send_dummy_email_otp(email, otp)
+
+    if success:
+        # Store in session
+        session["otp_data"] = {
+            "otp": otp,
+            "email": email,
+            "expires_at": time.time() + OTP_EXPIRY_SECONDS,
+            "attempts": 0,
+        }
+        record_failed_attempt("otp", email)  # Track for rate limiting
+        return jsonify({"success": True, "message": "OTP sent to your email."})
+    else:
+        return jsonify({"success": False, "error": message}), 500
+
+
+@app.route("/api/verify-otp", methods=["POST"])
+def api_verify_otp():
+    """Verify the OTP entered by user."""
+    data = request.get_json()
+    if not data:
+        return jsonify({"success": False, "error": "Invalid request."}), 400
+
+    otp_entered = (data.get("otp") or "").strip()
+    email = (data.get("email") or "").strip().lower()
+
+    otp_data = session.get("otp_data")
+    if not otp_data:
+        return jsonify({"success": False, "error": "No OTP request found. Please send OTP first."}), 400
+
+    if otp_data["email"] != email:
+        return jsonify({"success": False, "error": "Email mismatch."}), 400
+
+    if time.time() > otp_data["expires_at"]:
+        session.pop("otp_data", None)
+        return jsonify({"success": False, "error": "OTP expired. Please request a new one."}), 400
+
+    # Max 5 verification attempts
+    if otp_data.get("attempts", 0) >= 5:
+        session.pop("otp_data", None)
+        return jsonify({"success": False, "error": "Too many failed attempts. Please request a new OTP."}), 400
+
+    if otp_entered != otp_data["otp"]:
+        otp_data["attempts"] = otp_data.get("attempts", 0) + 1
+        session["otp_data"] = otp_data
+        remaining = 5 - otp_data["attempts"]
+        return jsonify({"success": False, "error": f"Incorrect OTP. {remaining} attempts remaining."}), 400
+
+    # OTP verified! Mark in session
+    session["email_verified"] = email
+    session.pop("otp_data", None)
+    return jsonify({"success": True, "message": "Email verified successfully!"})
+
 
 # ==================== ROUTES ====================
 
 
 @app.route("/")
 def index():
+    user = get_current_user()
+
+    if not user:
+        # Show landing page for non-logged-in users
+        return render_template("landing.html", user=None)
+
+    # Show dashboard for logged-in users
     rooms = Room.query.all()
     videos = Video.query.all()
     # Get upcoming scheduled parties
@@ -358,7 +507,7 @@ def index():
         "index.html",
         rooms=rooms,
         videos=videos,
-        user=get_current_user(),
+        user=user,
         scheduled_parties=scheduled,
     )
 
@@ -454,7 +603,6 @@ def admin_login():
 
         if email == ADMIN_EMAIL and verify_admin_password(password):
             clear_failed_attempts("admin_login", rate_limit_subject)
-            session.clear()
             session["is_admin"] = True
             session.permanent = True
             return redirect(url_for("admin"))
@@ -465,7 +613,7 @@ def admin_login():
 
 @app.route("/admin/logout", methods=["POST"])
 def admin_logout():
-    session.clear()
+    session.pop("is_admin", None)
     flash("Admin logged out successfully!")
     return redirect(url_for("index"))
 
@@ -486,100 +634,41 @@ def signup():
             return redirect(url_for("signup"))
 
         if not is_strong_password(password):
-            flash(
-                "Password must be at least 8 chars and include uppercase, lowercase, number, and symbol."
-            )
+            flash("Please enter a password.")
             return redirect(url_for("signup"))
 
-        if User.query.filter(func.lower(User.email) == email).first():
+        # Check if email was verified via OTP
+        verified_email = session.get("email_verified")
+        if verified_email != email:
+            flash("Please verify your email address with OTP first.")
+            return redirect(url_for("signup"))
+
+        # Check if email already registered
+        if User.query.filter_by(email=email).first():
             flash("This email is already registered. Please login.")
             return redirect(url_for("login"))
 
-        session["pending_signup"] = {
-            "name": name,
-            "email": email,
-            "password_hash": generate_password_hash(password),
-        }
-
-        redirect_uri = url_for("authorize_signup_google", _external=True)
-        if "localhost" in redirect_uri:
-            redirect_uri = redirect_uri.replace("localhost", "127.0.0.1")
-        return google.authorize_redirect(redirect_uri, login_hint=email)
-
-    return render_template("signup.html", user=get_current_user())
-
-
-@app.route("/authorize/signup/google")
-def authorize_signup_google():
-    try:
-        if "error" in request.args:
-            session.pop("pending_signup", None)
-            flash(
-                f"Google verification failed: {request.args.get('error_description', 'Unknown error')}"
-            )
-            return redirect(url_for("signup"))
-
-        if "code" not in request.args:
-            session.pop("pending_signup", None)
-            flash("Authentication code missing.")
-            return redirect(url_for("signup"))
-
-        pending = session.get("pending_signup")
-        if not pending:
-            flash("Signup session expired. Please try again.")
-            return redirect(url_for("signup"))
-
-        token = google.authorize_access_token()
-        resp = google.get("https://openidconnect.googleapis.com/v1/userinfo")
-        user_info = resp.json()
-
-        email = (user_info.get("email") or "").strip().lower()
-        google_id = user_info.get("sub")
-        email_verified = bool(user_info.get("email_verified"))
-        if not email or not google_id:
-            session.pop("pending_signup", None)
-            flash("Could not verify your Google account details. Please try again.")
-            return redirect(url_for("signup"))
-        if not is_valid_email(email):
-            session.pop("pending_signup", None)
-            flash("Invalid email returned by provider.")
-            return redirect(url_for("signup"))
-        if not email_verified:
-            session.pop("pending_signup", None)
-            flash("Google account email is not verified.")
-            return redirect(url_for("signup"))
-
-        if email.lower() != pending["email"].lower():
-            session.pop("pending_signup", None)
-            flash(f"Verification failed: The Google account ({email}) does not match the email you entered ({pending['email']}). Please use the correct account.")
-            return redirect(url_for("signup"))
-
-        if User.query.filter(func.lower(User.email) == email).first():
-            session.pop("pending_signup", None)
-            flash("This email is already registered. Please login instead.")
-            return redirect(url_for("login"))
+        # Generate unique username
+        username = generate_unique_username(name)
 
         new_user = User(
-            username=email,  # Using email as username to satisfy constraints without generation
-            name=pending["name"],
+            username=username,
+            name=name,
             email=email,
-            google_id=google_id,
-            password_hash=pending["password_hash"],
+            email_verified=True,
+            password_hash=generate_password_hash(password),
         )
         db.session.add(new_user)
         db.session.commit()
 
-        session.pop("pending_signup", None)
-        session.clear()
+        session.pop("email_verified", None)
+        session.pop("otp_data", None)
         session["user_id"] = new_user.id
         session.permanent = True
-        flash(f"Welcome, {new_user.name}! Your email {email} has been verified ✅")
+        flash(f"Welcome, {new_user.name}! Your account has been created.")
         return redirect(url_for("index"))
 
-    except Exception as e:
-        session.pop("pending_signup", None)
-        flash(f"Error during email verification: {str(e)}")
-        return redirect(url_for("signup"))
+    return render_template("signup.html", user=get_current_user())
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -596,13 +685,12 @@ def login():
             return render_template("login.html", user=get_current_user())
 
         if not identifier or not password:
-            flash("Please enter both username/email and password")
-            return render_template("login.html", user=get_current_user())
-        if "@" in identifier and not is_valid_email(identifier):
-            flash("Please enter a valid email address.")
+            flash("Please enter your credentials.")
             return render_template("login.html", user=get_current_user())
 
         lowered_identifier = identifier.lower()
+
+        # Search by email or username
         user = User.query.filter(
             (func.lower(User.email) == lowered_identifier)
             | (func.lower(User.username) == lowered_identifier)
@@ -610,12 +698,12 @@ def login():
 
         if not user:
             record_failed_attempt("login", rate_limit_subject)
-            flash("Invalid username/email or password")
+            flash("Invalid credentials. Please check and try again.")
             return render_template("login.html", user=get_current_user())
 
         if user.is_blocked:
             record_failed_attempt("login", rate_limit_subject)
-            flash("Your account has been blocked by the admin. Contact support.")
+            flash("Your account has been blocked. Contact support.")
             return redirect(url_for("login"))
 
         if not user.password_hash and not user.google_id:
@@ -633,10 +721,10 @@ def login():
             session.clear()
             session["user_id"] = user.id
             session.permanent = True
-            flash("Logged in successfully!")
+            flash("Welcome back!")
             return redirect(url_for("index"))
         record_failed_attempt("login", rate_limit_subject)
-        flash("Invalid username/email or password")
+        flash("Invalid credentials. Please check and try again.")
     return render_template("login.html", user=get_current_user())
 
 
@@ -691,17 +779,10 @@ def authorize_google():
             if user:
                 user.google_id = google_id
             else:
-                base_username = username.replace(" ", "").lower()
-                if not base_username:
-                    base_username = email.split("@")[0].lower()
-                unique_username = base_username
-                counter = 1
-                while User.query.filter(func.lower(User.username) == unique_username).first():
-                    unique_username = f"{base_username}{counter}"
-                    counter += 1
-                # Provide a placeholder password_hash for Google users to satisfy NOT NULL constraints in older databases
+                unique_username = generate_unique_username(username)
                 user = User(
                     username=unique_username,
+                    name=username,
                     email=email,
                     google_id=google_id,
                     password_hash=f"google_oauth_{secrets.token_hex(16)}",
@@ -716,7 +797,7 @@ def authorize_google():
         session.clear()
         session["user_id"] = user.id
         session.permanent = True
-        flash(f"Welcome, {user.username}!")
+        flash(f"Welcome, {user.name or user.username}!")
         return redirect(url_for("index"))
     except Exception as e:
         flash(f"An error occurred during Google sign-in: {str(e)}")
@@ -741,7 +822,7 @@ def contact():
             db.session.add(msg)
             db.session.commit()
             flash(
-                "Your message has been sent successfully! We'll get back to you soon. ✅"
+                "Your message has been sent successfully! We'll get back to you soon."
             )
         else:
             flash("Please fill in all fields.")
@@ -814,7 +895,7 @@ def profile_edit():
         user.avatar_filename = filename
 
     db.session.commit()
-    flash("Profile updated! ✅")
+    flash("Profile updated!")
     return redirect(url_for("profile", username=user.username))
 
 
@@ -872,7 +953,7 @@ def rate_movie(video_id):
         db.session.add(rating)
 
     db.session.commit()
-    flash(f'Rated "{video.title}" {"⭐" * score}')
+    flash(f'Rated "{video.title}" ({score}/5)')
     return redirect(url_for("movies"))
 
 
@@ -967,7 +1048,7 @@ def schedule_party():
     )
     db.session.add(party)
     db.session.commit()
-    flash(f'Party "{name}" scheduled! 📅')
+    flash(f'Party "{name}" scheduled!')
     return redirect(url_for("index"))
 
 
@@ -994,7 +1075,7 @@ def admin():
             return redirect(request.url)
 
         if video_file and allowed_video(video_file.filename):
-            v_filename = secure_filename(video_file.filename)
+            v_filename = str(uuid.uuid4())[:8] + "_" + secure_filename(video_file.filename)
             v_path = os.path.join(app.config["UPLOAD_FOLDER"], v_filename)
             video_file.save(v_path)
 
@@ -1052,7 +1133,7 @@ def admin():
             flash("Invalid format!")
             return redirect(request.url)
 
-    videos = Video.query.all()
+    videos = Video.query.order_by(Video.upload_date.desc()).all()
     users = User.query.all()
 
     active_watching = {}
@@ -1071,14 +1152,42 @@ def admin():
     ).all()
     unread_count = ContactMessage.query.filter_by(is_read=False).count()
 
+    total_ratings = Rating.query.count()
+    avg_rating_raw = db.session.query(func.avg(Rating.score)).scalar()
+    avg_rating = round(float(avg_rating_raw or 0), 1)
+    blocked_users = User.query.filter_by(is_blocked=True).count()
+    private_rooms = Room.query.filter_by(is_private=True).count()
+
+    video_rows = []
+    for video in videos:
+        file_size = "Missing file"
+        file_path = os.path.join(app.config["UPLOAD_FOLDER"], video.filename)
+        if os.path.exists(file_path):
+            file_size = human_file_size(os.path.getsize(file_path))
+        video_rows.append({"video": video, "file_size": file_size})
+
+    admin_stats = {
+        "total_videos": len(videos),
+        "private_rooms": private_rooms,
+        "total_rooms": Room.query.count(),
+        "total_users": len(users),
+        "blocked_users": blocked_users,
+        "watching_now": len(active_watching),
+        "total_ratings": total_ratings,
+        "avg_rating": avg_rating,
+        "unread_messages": unread_count,
+    }
+
     return render_template(
         "admin.html",
         videos=videos,
+        video_rows=video_rows,
         users=users,
         active_watching=active_watching,
         user=get_current_user(),
         contact_messages=contact_messages,
         unread_count=unread_count,
+        admin_stats=admin_stats,
     )
 
 
@@ -1195,7 +1304,7 @@ def upload_subtitle(video_id):
         video.subtitle_filename = s_base
 
     db.session.commit()
-    flash(f'Subtitle uploaded for "{video.title}" ✅')
+    flash(f'Subtitle uploaded for "{video.title}"')
     return redirect(url_for("admin"))
 
 
@@ -1287,15 +1396,31 @@ def mark_all_notifications_read():
 
 # ==================== SOCKET.IO ====================
 
-ROOM_COUNT = {}
 SID_TO_ROOM = {}
 ROOM_USERS = {}
+ROOM_PLAYBACK_STATE = {}
 
 
 def broadcast_user_list(room):
     users = list(ROOM_USERS.get(room, set()))
     count = len(users)
     emit("user_count", {"count": count, "users": users}, room=room)
+
+
+def get_room_playback_snapshot(room):
+    state = ROOM_PLAYBACK_STATE.get(room)
+    if not state:
+        return None
+
+    current_time = float(state.get("time", 0))
+    if state.get("is_playing"):
+        elapsed = max(0.0, time.time() - float(state.get("updated_at", time.time())))
+        current_time += elapsed
+        event_type = "play"
+    else:
+        event_type = "pause"
+
+    return {"type": event_type, "time": current_time}
 
 
 @socketio.on("join")
@@ -1310,6 +1435,9 @@ def on_join(data):
     ROOM_USERS[room].add(username)
     broadcast_user_list(room)
     emit("status", {"msg": f"{username} has entered the room."}, room=room)
+    snapshot = get_room_playback_snapshot(room)
+    if snapshot:
+        emit("video_state", snapshot, to=sid)
 
 
 @socketio.on("disconnect")
@@ -1323,6 +1451,7 @@ def on_disconnect():
             ROOM_USERS[room].discard(username)
             if not ROOM_USERS[room]:
                 del ROOM_USERS[room]
+                ROOM_PLAYBACK_STATE.pop(room, None)
         broadcast_user_list(room)
         emit("status", {"msg": f"{username} has left the room."}, room=room)
         del SID_TO_ROOM[sid]
@@ -1337,6 +1466,7 @@ def on_leave(data):
         ROOM_USERS[room].discard(username)
         if not ROOM_USERS[room]:
             del ROOM_USERS[room]
+            ROOM_PLAYBACK_STATE.pop(room, None)
     broadcast_user_list(room)
     emit("status", {"msg": f"{username} has left the room."}, room=room)
 
@@ -1367,7 +1497,34 @@ def on_stop_typing(data):
 @socketio.on("sync_video")
 def on_sync_video(data):
     room = data["room"]
+    event_type = data.get("type")
+    event_time = float(data.get("time", 0))
+    current = ROOM_PLAYBACK_STATE.get(room, {"is_playing": False, "time": 0.0})
+    if event_type in {"play", "pause", "seek"}:
+        if event_type == "play":
+            current["is_playing"] = True
+            current["time"] = event_time
+        elif event_type == "pause":
+            current["is_playing"] = False
+            current["time"] = event_time
+        elif event_type == "seek":
+            current["time"] = event_time
+        current["updated_at"] = time.time()
+        ROOM_PLAYBACK_STATE[room] = current
     emit("video_event", data, room=room, include_self=False)
+
+
+@socketio.on("request_video_state")
+def on_request_video_state(data):
+    sid = request.sid
+    room = (data or {}).get("room")
+    if not room and sid in SID_TO_ROOM:
+        room = SID_TO_ROOM[sid].get("room")
+    if not room:
+        return
+    snapshot = get_room_playback_snapshot(room)
+    if snapshot:
+        emit("video_state", snapshot, to=sid)
 
 
 @socketio.on("on_screen_text")

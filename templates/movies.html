@@ -4,7 +4,7 @@
 <section class="movies-library">
     <div class="container">
         {% if is_recommendations %}
-        <h1 class="section-title">🌙 Recommended For You</h1>
+        <h1 class="section-title"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:-4px; margin-right: 8px;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>Recommended For You</h1>
         <p style="text-align: center; color: var(--text-muted); margin-bottom: 40px;">Based on your watch history and ratings</p>
         {% else %}
         <h1 class="section-title">Movie Library</h1>
@@ -15,9 +15,9 @@
             <div class="movie-card">
                 <div class="poster-wrapper">
                     {% if video.poster_filename %}
-                        <img src="{{ url_for('static', filename='uploads/' + video.poster_filename) }}" alt="{{ video.title }}">
+                        <img src="{{ url_for('static', filename='uploads/' + video.poster_filename) }}" alt="{{ video.title }}" data-smart-thumb data-thumb-ratio="0.67">
                     {% else %}
-                        <img src="{{ url_for('static', filename='images/poster_dummy_png_1775502805003.png') }}" alt="{{ video.title }}">
+                        <img src="{{ url_for('static', filename='images/poster_dummy_png_1775502805003.png') }}" alt="{{ video.title }}" data-smart-thumb data-thumb-ratio="0.67">
                     {% endif %}
                     <div class="poster-overlay">
                         {% if user %}
@@ -30,7 +30,7 @@
                             </form>
                             <!-- Rate Button -->
                             <button class="btn btn-secondary btn-sm rate-trigger" onclick="openRatingModal({{ video.id }}, '{{ video.title }}', {{ user_ratings.get(video.id, 0) }})">
-                                ⭐ Rate
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#FBBF24; display:inline-block; margin-right:4px; vertical-align:-2px;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>Rate
                             </button>
                         </div>
                         {% else %}
@@ -67,7 +67,7 @@
                 {% for i in range(6 - videos|length) %}
                 <div class="movie-card dummy-card">
                     <div class="poster-wrapper">
-                        <img src="{{ url_for('static', filename='images/poster_dummy_png_1775502805003.png') }}" alt="Coming Soon">
+                        <img src="{{ url_for('static', filename='images/poster_dummy_png_1775502805003.png') }}" alt="Coming Soon" data-smart-thumb data-thumb-ratio="0.67">
                         <div class="poster-overlay">
                             <span class="badge" style="background: var(--primary); color: white; padding: 5px 15px; border-radius: 20px; font-weight: 800; font-size: 0.7rem;">PREMIERING SOON</span>
                         </div>
@@ -121,7 +121,7 @@
 <script>
 function openRatingModal(videoId, title, currentScore) {
     document.getElementById('ratingModal').style.display = 'flex';
-    document.getElementById('ratingMovieTitle').textContent = '⭐ Rate: ' + title;
+    document.getElementById('ratingMovieTitle').textContent = 'Rate: ' + title;
     document.getElementById('ratingForm').action = '/movie/' + videoId + '/rate';
     document.getElementById('ratingScore').value = currentScore || 0;
     highlightStars(currentScore || 0);

@@ -8,6 +8,8 @@ const player = videojs('watchVideo', {
 });
 
 const errorMsg = document.getElementById('playback-error-msg');
+const roomSyncToast = document.getElementById('roomSyncToast');
+const resyncBtn = document.getElementById('resyncBtn');
 
 // Join room
 socket.emit('join', { room: ROOM_ID, username: USERNAME });
@@ -22,6 +24,50 @@ player.on('error', function() {
 
 // Syncing Video
 let isRemoteChange = false;
+let pendingRoomState = null;
+let toastTimer = null;
+
+function showRoomSyncToast(message) {
+    if (!roomSyncToast) return;
+    roomSyncToast.textContent = message || 'Synced to room time';
+    roomSyncToast.style.display = 'block';
+    requestAnimationFrame(() => {
+        roomSyncToast.classList.add('is-visible');
+    });
+    if (toastTimer) {
+        clearTimeout(toastTimer);
+    }
+    toastTimer = setTimeout(() => {
+        roomSyncToast.classList.remove('is-visible');
+        setTimeout(() => {
+            roomSyncToast.style.display = 'none';
+        }, 220);
+    }, 1800);
+}
+
+function applyVideoEvent(data) {
+    if (!data || typeof data.time !== 'number') return;
+    isRemoteChange = true;
+    if (data.type === 'play') {
+        player.currentTime(data.time);
+        player.play();
+    } else if (data.type === 'pause') {
+        player.pause();
+    } else if (data.type === 'seek') {
+        player.currentTime(data.time);
+    }
+}
+
+function applyRoomState(data) {
+    if (!data || typeof data.time !== 'number') return;
+    isRemoteChange = true;
+    player.currentTime(data.time);
+    if (data.type === 'play') {
+        player.play();
+    } else if (data.type === 'pause') {
+        player.pause();
+    }
+}
 
 player.on('play', () => {
     if (!isRemoteChange) {
@@ -45,16 +91,33 @@ player.on('seeked', () => {
 });
 
 socket.on('video_event', (data) => {
-    isRemoteChange = true;
-    if (data.type === 'play') {
-        player.currentTime(data.time);
-        player.play();
-    } else if (data.type === 'pause') {
-        player.pause();
-    } else if (data.type === 'seek') {
-        player.currentTime(data.time);
+    applyVideoEvent(data);
+});
+
+socket.on('video_state', (data) => {
+    if (!data || typeof data.time !== 'number') return;
+    if (player.readyState() < 1) {
+        pendingRoomState = data;
+        return;
+    }
+    applyRoomState(data);
+    showRoomSyncToast(`Synced to room time (${formatTime(data.time)})`);
+});
+
+player.on('loadedmetadata', () => {
+    if (pendingRoomState) {
+        applyRoomState(pendingRoomState);
+        showRoomSyncToast(`Synced to room time (${formatTime(pendingRoomState.time)})`);
+        pendingRoomState = null;
     }
 });
+
+if (resyncBtn) {
+    resyncBtn.addEventListener('click', () => {
+        socket.emit('request_video_state', { room: ROOM_ID });
+        showRoomSyncToast('Re-sync requested...');
+    });
+}
 
 // Chat & UI Interactions
 const chatInput = document.getElementById('chatInput');
@@ -329,7 +392,7 @@ if (inviteBtn) {
         const url = window.location.href;
         navigator.clipboard.writeText(url).then(() => {
             const originalText = inviteBtn.innerText;
-            inviteBtn.innerText = 'Copied! ✅';
+            inviteBtn.innerText = 'Copied!';
             inviteBtn.style.background = '#2ecc71';
             
             setTimeout(() => {
