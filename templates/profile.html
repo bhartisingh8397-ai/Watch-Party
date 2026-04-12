@@ -9,11 +9,11 @@
                 {% if profile_user.avatar_filename %}
                 <img src="{{ url_for('static', filename='uploads/' + profile_user.avatar_filename) }}" alt="Avatar">
                 {% else %}
-                <span>{{ profile_user.username[0]|upper }}</span>
+                <span>{{ (profile_user.name or profile_user.username)[0]|upper }}</span>
                 {% endif %}
             </div>
             <div class="profile-info">
-                <h1>{{ profile_user.username }}</h1>
+                <h1>{{ profile_user.name or profile_user.username }}</h1>
                 <p class="profile-email">{{ profile_user.email }}</p>
                 {% if profile_user.bio %}
                 <p class="profile-bio">{{ profile_user.bio }}</p>

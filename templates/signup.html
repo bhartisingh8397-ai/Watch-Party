@@ -10,16 +10,20 @@
         <form action="{{ url_for('signup') }}" method="POST">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="form-group">
-                <label for="username">Choose Username</label>
-                <input type="text" name="username" placeholder="Pick a unique username" required>
+                <label for="name">Full Name</label>
+                <input type="text" name="name" placeholder="Enter your full name" required autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label for="email">Email Address</label>
+                <input type="email" name="email" placeholder="Enter your email" required autocomplete="off">
             </div>
             <div class="form-group">
                 <label for="password">Create Password</label>
-                <input type="password" name="password" placeholder="Min 6 characters" required minlength="6">
+                <input type="password" name="password" placeholder="Enter password" required autocomplete="off">
             </div>
             <button type="submit" class="btn btn-google" style="margin-top: 10px;">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" width="18">
-                Verify Email & Sign Up with Google
+                Verify & Sign Up with Google
             </button>
         </form>
 

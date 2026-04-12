@@ -167,17 +167,8 @@ def get_client_ip():
 
 
 def is_strong_password(password):
-    if len(password) < 8:
-        return False
-    if not re.search(r"[A-Z]", password):
-        return False
-    if not re.search(r"[a-z]", password):
-        return False
-    if not re.search(r"\d", password):
-        return False
-    if not re.search(r"[^A-Za-z0-9]", password):
-        return False
-    return True
+    # Removing rules as per user request. Just checking if it's not empty.
+    return len(password) >= 1
 
 
 def is_valid_email(email):
@@ -274,6 +265,7 @@ def login_required(f):
 
 
 # Admin credentials
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@watchparty.com")
 ADMIN_PASS = os.getenv("ADMIN_PASS")
 ADMIN_PASS_HASH = os.getenv("ADMIN_PASS_HASH")
 if not IS_PRODUCTION and not ADMIN_PASS and not ADMIN_PASS_HASH:
@@ -308,6 +300,7 @@ with app.app_context():
         ]
         migrations = {
             "google_id": "ALTER TABLE user ADD COLUMN google_id VARCHAR(120)",
+            "name": "ALTER TABLE user ADD COLUMN name VARCHAR(100)",
             "is_blocked": "ALTER TABLE user ADD COLUMN is_blocked BOOLEAN DEFAULT 0",
             "bio": "ALTER TABLE user ADD COLUMN bio VARCHAR(300) DEFAULT ''",
             "avatar_filename": "ALTER TABLE user ADD COLUMN avatar_filename VARCHAR(500)",
@@ -449,6 +442,7 @@ def room_password(room_id):
 @app.route("/admin_login", methods=["GET", "POST"])
 def admin_login():
     if request.method == "POST":
+        email = request.form.get("email", "").strip()
         password = request.form.get("password", "")
         rate_limit_subject = get_client_ip()
         limited, retry_after = is_rate_limited(
@@ -458,14 +452,14 @@ def admin_login():
             flash(f"Too many admin login attempts. Retry in {retry_after} seconds.")
             return render_template("admin_login.html", user=get_current_user())
 
-        if verify_admin_password(password):
+        if email == ADMIN_EMAIL and verify_admin_password(password):
             clear_failed_attempts("admin_login", rate_limit_subject)
             session.clear()
             session["is_admin"] = True
             session.permanent = True
             return redirect(url_for("admin"))
         record_failed_attempt("admin_login", rate_limit_subject)
-        flash("Invalid Password")
+        flash("Invalid Admin Email or Password")
     return render_template("admin_login.html", user=get_current_user())
 
 
@@ -479,14 +473,16 @@ def admin_logout():
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
     if request.method == "POST":
-        username = request.form.get("username", "").strip()
+        name = request.form.get("name", "").strip()
+        email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "")
-        username_pattern = r"^[A-Za-z0-9_]{3,30}$"
 
-        if not re.match(username_pattern, username):
-            flash(
-                "Username must be 3-30 characters and contain only letters, numbers, or underscores."
-            )
+        if not name:
+            flash("Please enter your name.")
+            return redirect(url_for("signup"))
+
+        if not is_valid_email(email):
+            flash("Please enter a valid email address.")
             return redirect(url_for("signup"))
 
         if not is_strong_password(password):
@@ -495,19 +491,20 @@ def signup():
             )
             return redirect(url_for("signup"))
 
-        if User.query.filter(func.lower(User.username) == username.lower()).first():
-            flash("Username already exists")
-            return redirect(url_for("signup"))
+        if User.query.filter(func.lower(User.email) == email).first():
+            flash("This email is already registered. Please login.")
+            return redirect(url_for("login"))
 
         session["pending_signup"] = {
-            "username": username,
+            "name": name,
+            "email": email,
             "password_hash": generate_password_hash(password),
         }
 
         redirect_uri = url_for("authorize_signup_google", _external=True)
         if "localhost" in redirect_uri:
             redirect_uri = redirect_uri.replace("localhost", "127.0.0.1")
-        return google.authorize_redirect(redirect_uri)
+        return google.authorize_redirect(redirect_uri, login_hint=email)
 
     return render_template("signup.html", user=get_current_user())
 
@@ -552,27 +549,22 @@ def authorize_signup_google():
             flash("Google account email is not verified.")
             return redirect(url_for("signup"))
 
+        if email.lower() != pending["email"].lower():
+            session.pop("pending_signup", None)
+            flash(f"Verification failed: The Google account ({email}) does not match the email you entered ({pending['email']}). Please use the correct account.")
+            return redirect(url_for("signup"))
+
         if User.query.filter(func.lower(User.email) == email).first():
             session.pop("pending_signup", None)
             flash("This email is already registered. Please login instead.")
             return redirect(url_for("login"))
 
-        if User.query.filter(func.lower(User.username) == pending["username"].lower()).first():
-            session.pop("pending_signup", None)
-            flash("Username was taken. Please try again.")
-            return redirect(url_for("signup"))
-
-        password_hash = pending.get("password_hash")
-        if not password_hash:
-            session.pop("pending_signup", None)
-            flash("Signup session expired. Please try again.")
-            return redirect(url_for("signup"))
-
         new_user = User(
-            username=pending["username"],
+            username=email,  # Using email as username to satisfy constraints without generation
+            name=pending["name"],
             email=email,
             google_id=google_id,
-            password_hash=password_hash,
+            password_hash=pending["password_hash"],
         )
         db.session.add(new_user)
         db.session.commit()
@@ -581,7 +573,7 @@ def authorize_signup_google():
         session.clear()
         session["user_id"] = new_user.id
         session.permanent = True
-        flash(f"Welcome, {new_user.username}! Your email {email} has been verified ✅")
+        flash(f"Welcome, {new_user.name}! Your email {email} has been verified ✅")
         return redirect(url_for("index"))
 
     except Exception as e:
@@ -707,7 +699,13 @@ def authorize_google():
                 while User.query.filter(func.lower(User.username) == unique_username).first():
                     unique_username = f"{base_username}{counter}"
                     counter += 1
-                user = User(username=unique_username, email=email, google_id=google_id)
+                # Provide a placeholder password_hash for Google users to satisfy NOT NULL constraints in older databases
+                user = User(
+                    username=unique_username,
+                    email=email,
+                    google_id=google_id,
+                    password_hash=f"google_oauth_{secrets.token_hex(16)}",
+                )
                 db.session.add(user)
             db.session.commit()
 

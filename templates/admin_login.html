@@ -5,8 +5,10 @@
     <h2>Admin Login</h2>
     <form action="{{ url_for('admin_login') }}" method="POST">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="email">Admin Email</label>
+        <input type="email" name="email" placeholder="Enter Admin Email" required style="margin-bottom: 15px;" autocomplete="off">
         <label for="password">Admin Password</label>
-        <input type="password" name="password" placeholder="Enter Admin Password" required>
+        <input type="password" name="password" placeholder="Enter Admin Password" required autocomplete="off">
         <button type="submit" class="btn" style="width: 100%;">Login</button>
     </form>
     <p style="margin-top: 20px; font-size: 0.8rem; color: #888; text-align: center;">
