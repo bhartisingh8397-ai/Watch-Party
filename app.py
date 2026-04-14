@@ -4,6 +4,9 @@ import random
 import secrets
 import time
 import uuid
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 from functools import wraps
 from flask import (
@@ -390,13 +393,54 @@ with app.app_context():
 
 # ==================== OTP (Email Dummy) ====================
 
-def send_dummy_email_otp(email, otp):
-    """Dummy email OTP sender. Just prints to console."""
-    print(f"\n{'='*40}")
-    print(f"DUMMY EMAIL SENT TO: {email}")
-    print(f"YOUR OTP IS: {otp}")
-    print(f"{'='*40}\n")
-    return True, "OTP sent successfully."
+def send_email_otp(email, otp):
+    """Sends an OTP via email using Amazon SES SMTP."""
+    smtp_server = os.getenv("SMTP_ENDPOINT")
+    smtp_port = int(os.getenv("SMTP_PORT", 587))
+    smtp_user = os.getenv("SMTP_USERNAME")
+    smtp_pass = os.getenv("SMTP_PASSWORD")
+    sender_email = "honestlyjatin@gmail.com"
+
+    try:
+        # Create a multipart/alternative message so email clients can choose their preferred format
+        msg = MIMEMultipart("alternative")
+        msg['From'] = f"Watch-Party <{sender_email}>"
+        msg['To'] = email
+        msg['Subject'] = "Your Watch-Party Verification Code"
+
+        text = f"Hello,\n\nYour Watch-Party verification code is: {otp}\n\nThis code is valid for 5 minutes.\n\nThank you!"
+        html = f"""\
+        <html>
+          <head></head>
+          <body style="font-family: Arial, sans-serif; color: #333;">
+            <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+                <h2 style="color: #2c3e50;">Watch-Party Verification</h2>
+                <p>Hello,</p>
+                <p>Your verification code is:</p>
+                <h1 style="color: #4CAF50; font-size: 32px; letter-spacing: 2px;">{otp}</h1>
+                <p>This code is valid for <strong>5 minutes</strong>.</p>
+                <br>
+                <p style="font-size: 12px; color: #999;">If you didn't request this code, you can safely ignore this email.</p>
+            </div>
+          </body>
+        </html>
+        """
+
+        part1 = MIMEText(text, 'plain')
+        part2 = MIMEText(html, 'html')
+
+        msg.attach(part1)
+        msg.attach(part2)
+
+        server = smtplib.SMTP(smtp_server, smtp_port)
+        server.starttls()
+        server.login(smtp_user, smtp_pass)
+        server.send_message(msg)
+        server.quit()
+        return True, "OTP sent successfully."
+    except Exception as e:
+        print(f"Failed to send email OTP: {e}")
+        return False, "Failed to send OTP email."
 
 
 @app.route("/api/send-otp", methods=["POST"])
@@ -428,7 +472,7 @@ def api_send_otp():
     otp = str(random.randint(100000, 999999))
 
     # Send OTP
-    success, message = send_dummy_email_otp(email, otp)
+    success, message = send_email_otp(email, otp)
 
     if success:
         # Store in session
