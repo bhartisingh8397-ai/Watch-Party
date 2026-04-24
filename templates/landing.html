@@ -147,125 +147,38 @@
             <div class="container">
                 <h2 class="section-title reveal">Loved by movie fans everywhere</h2>
                 <div class="testimonials-grid">
-                    <div class="testimonial-card reveal">
-                        <div class="testimonial-stars" style="display:flex; gap:2px; color:#FBBF24;">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                        </div>
-                        <p class="testimonial-text">"WatchParty completely changed our movie nights. We're in different cities but it feels like we're in the same room. The sync is flawless."</p>
-                        <div class="testimonial-author">
-                            <div class="testimonial-avatar" style="background: linear-gradient(135deg, #E50914, #FF6B6B);">
-                                <span>AK</span>
+                    {% if testimonials %}
+                        {% for t in testimonials %}
+                        <div class="testimonial-card reveal">
+                            <div class="testimonial-stars" style="display:flex; gap:2px; color:#FBBF24; margin-bottom: 12px;">
+                                {% for i in range(1, 6) %}
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="{{ 'currentColor' if i <= t.score else 'none' }}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                                {% endfor %}
                             </div>
-                            <div class="testimonial-info">
-                                <h4>Ananya Kapoor</h4>
-                                <span>Bengaluru, India</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="testimonial-card reveal">
-                        <div class="testimonial-stars" style="display:flex; gap:2px; color:#FBBF24;">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                        </div>
-                        <p class="testimonial-text">"The live chat and emoji reactions make it so fun. We were watching a horror movie and the synchronized screaming was hilarious. 10/10!"</p>
-                        <div class="testimonial-author">
-                            <div class="testimonial-avatar" style="background: linear-gradient(135deg, #0EA5E9, #38BDF8);">
-                                <span>RS</span>
-                            </div>
-                            <div class="testimonial-info">
-                                <h4>Rahul Sharma</h4>
-                                <span>Mumbai, India</span>
+                            <p class="testimonial-text" style="font-style: italic; color: var(--text); opacity: 0.9; line-height: 1.6; margin-bottom: 20px;">"{{ t.review }}"</p>
+                            <div class="testimonial-author" style="display: flex; align-items: center; gap: 12px; margin-top: auto; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
+                                <div class="testimonial-avatar" style="width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, var(--primary), #FF6B6B); display: flex; align-items: center; justify-content: center; font-weight: 700; color: white; overflow: hidden;">
+                                    {% if t.user.avatar_filename %}
+                                    <img src="{{ url_for('static', filename='uploads/' + t.user.avatar_filename) }}" alt="Avatar" style="width:100%; height:100%; object-fit:cover;">
+                                    {% else %}
+                                    <span>{{ t.user.username[0]|upper }}</span>
+                                    {% endif %}
+                                </div>
+                                <div class="testimonial-info">
+                                    <h4 style="margin: 0; font-size: 0.95rem; font-weight: 600;">{{ t.user.name or t.user.username }}</h4>
+                                    <span style="opacity: 0.6; font-size: 0.75rem; display: block;">Reviewed: {{ t.video.title }}</span>
+                                </div>
                             </div>
                         </div>
-                    </div>
-
-                    <div class="testimonial-card reveal">
-                        <div class="testimonial-stars" style="display:flex; gap:2px; color:#FBBF24;">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                        {% endfor %}
+                    {% else %}
+                        <div class="testimonial-card empty-testimonial reveal" style="grid-column: 1 / -1; text-align: center; padding: 60px 20px; border: 1px dashed rgba(255,255,255,0.2); background: rgba(255,255,255,0.02);">
+                            <div style="font-size: 3.5rem; margin-bottom: 20px; filter: drop-shadow(0 0 10px var(--primary));">🎥</div>
+                            <h3 style="font-size: 1.5rem; margin-bottom: 15px;">Be the first to review!</h3>
+                            <p style="opacity: 0.7; max-width: 450px; margin: 0 auto 25px; font-size: 1rem;">Our cinematic community is just getting started. Share your favorite moments and join our Hall of Fame!</p>
+                            <a href="{{ url_for('movies') }}" class="btn btn-primary" style="padding: 12px 30px;">Share Your Review</a>
                         </div>
-                        <p class="testimonial-text">"Setup was incredibly easy. Created a private room, shared the password with friends, and we were watching in under 2 minutes. Super clean interface."</p>
-                        <div class="testimonial-author">
-                            <div class="testimonial-avatar" style="background: linear-gradient(135deg, #A855F7, #C084FC);">
-                                <span>PM</span>
-                            </div>
-                            <div class="testimonial-info">
-                                <h4>Priya Mehta</h4>
-                                <span>Delhi, India</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="testimonial-card reveal">
-                        <div class="testimonial-stars" style="display:flex; gap:2px; color:#FBBF24;">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                        </div>
-                        <p class="testimonial-text">"Love the subtitle support! We watched a Korean movie with subtitles and everything worked perfectly. The on-screen text feature is a game-changer."</p>
-                        <div class="testimonial-author">
-                            <div class="testimonial-avatar" style="background: linear-gradient(135deg, #F59E0B, #FBBF24);">
-                                <span>VK</span>
-                            </div>
-                            <div class="testimonial-info">
-                                <h4>Vikram Kumar</h4>
-                                <span>Hyderabad, India</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="testimonial-card reveal">
-                        <div class="testimonial-stars" style="display:flex; gap:2px; color:#FBBF24;">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                        </div>
-                        <p class="testimonial-text">"We use WatchParty for our college film club. The scheduled party feature helps us plan weekly screenings. Professional and reliable."</p>
-                        <div class="testimonial-author">
-                            <div class="testimonial-avatar" style="background: linear-gradient(135deg, #10B981, #34D399);">
-                                <span>SN</span>
-                            </div>
-                            <div class="testimonial-info">
-                                <h4>Sneha Nair</h4>
-                                <span>Chennai, India</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="testimonial-card reveal">
-                        <div class="testimonial-stars" style="display:flex; gap:2px; color:#FBBF24;">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                        </div>
-                        <p class="testimonial-text">"Finally a platform that just works. No plugins, no extensions — just open the browser and start watching together. Beautiful design too!"</p>
-                        <div class="testimonial-author">
-                            <div class="testimonial-avatar" style="background: linear-gradient(135deg, #EC4899, #F472B6);">
-                                <span>DJ</span>
-                            </div>
-                            <div class="testimonial-info">
-                                <h4>Deepak Joshi</h4>
-                                <span>Pune, India</span>
-                            </div>
-                        </div>
-                    </div>
+                    {% endif %}
                 </div>
             </div>
         </section>

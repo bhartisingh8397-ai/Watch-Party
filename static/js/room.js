@@ -179,8 +179,25 @@ socket.on('message', (data) => {
     } else {
         div.classList.add('chat-message-received');
     }
+
+    const initial = data.username.charAt(0).toUpperCase();
+    const colors = ['#D4AF37', '#2ecc71', '#3498db', '#e74c3c', '#9b59b6', '#1abc9c', '#f39c12', '#e67e22'];
+    const color = colors[data.username.charCodeAt(0) % colors.length];
     
-    div.innerHTML = `<span class="chat-username">${data.username}</span><span class="chat-text">${data.msg}</span>`;
+    let avatarHtml;
+    if (data.avatar) {
+        avatarHtml = `<img src="/static/uploads/${data.avatar}" style="width: 24px; height: 24px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.1); object-fit: cover; margin-right: 8px;">`;
+    } else {
+        avatarHtml = `<div style="width: 24px; height: 24px; border-radius: 50%; background: ${color}20; color: ${color}; border: 1px solid ${color}50; display: inline-flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 700; margin-right: 8px;">${initial}</div>`;
+    }
+
+    div.innerHTML = `
+        <div style="display: flex; align-items: center; margin-bottom: 2px;">
+            ${avatarHtml}
+            <span class="chat-username" style="margin-top:0;">${data.username}</span>
+        </div>
+        <span class="chat-text">${data.msg}</span>
+    `;
     chatBox.appendChild(div);
     chatBox.scrollTop = chatBox.scrollHeight;
 });
@@ -277,19 +294,24 @@ socket.on('user_count', (data) => {
             userItem.classList.add('active-user-item');
             
             // Highlight current user
-            if (user === USERNAME) {
+            if (user.username === USERNAME) {
                 userItem.classList.add('is-you');
             }
 
-            const initial = user.charAt(0).toUpperCase();
+            const initial = user.username.charAt(0).toUpperCase();
             const colors = ['#D4AF37', '#2ecc71', '#3498db', '#e74c3c', '#9b59b6', '#1abc9c', '#f39c12', '#e67e22'];
-            const color = colors[user.charCodeAt(0) % colors.length];
+            const color = colors[user.username.charCodeAt(0) % colors.length];
+
+            let avatarHtml;
+            if (user.avatar) {
+                avatarHtml = `<img src="/static/uploads/${user.avatar}" class="user-avatar-sm" style="object-fit:cover; border: 1px solid rgba(255,255,255,0.1);">`;
+            } else {
+                avatarHtml = `<div class="user-avatar-sm" style="background: ${color}20; color: ${color}; border: 1px solid ${color}50;">${initial}</div>`;
+            }
 
             userItem.innerHTML = `
-                <div class="user-avatar-sm" style="background: ${color}20; color: ${color}; border: 1px solid ${color}50;">
-                    ${initial}
-                </div>
-                <span class="user-name-label">${user}${user === USERNAME ? ' (You)' : ''}</span>
+                ${avatarHtml}
+                <span class="user-name-label">${user.username}${user.username === USERNAME ? ' (You)' : ''}</span>
                 <span class="user-online-dot"></span>
             `;
             activeUsersList.appendChild(userItem);

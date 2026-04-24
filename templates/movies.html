@@ -29,7 +29,10 @@
                                 <button type="submit" class="btn btn-primary">Watch Now</button>
                             </form>
                             <!-- Rate Button -->
-                            <button class="btn btn-secondary btn-sm rate-trigger" onclick="openRatingModal({{ video.id }}, '{{ video.title }}', {{ user_ratings.get(video.id, 0) }})">
+                            <button class="btn btn-secondary btn-sm rate-trigger" 
+                                    data-video-id="{{ video.id }}" 
+                                    data-title="{{ video.title }}" 
+                                    data-current-score="{{ user_ratings.get(video.id, 0) }}">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#FBBF24; display:inline-block; margin-right:4px; vertical-align:-2px;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>Rate
                             </button>
                         </div>
@@ -119,10 +122,13 @@
 </div>
 
 <script>
+const ratingFormBaseUrl = "{{ url_for('rate_movie', video_id=0) }}";
+
 function openRatingModal(videoId, title, currentScore) {
     document.getElementById('ratingModal').style.display = 'flex';
     document.getElementById('ratingMovieTitle').textContent = 'Rate: ' + title;
-    document.getElementById('ratingForm').action = '/movie/' + videoId + '/rate';
+    // Replace the dummy 0 with actual videoId
+    document.getElementById('ratingForm').action = ratingFormBaseUrl.replace('0', videoId);
     document.getElementById('ratingScore').value = currentScore || 0;
     highlightStars(currentScore || 0);
 }
@@ -137,6 +143,16 @@ function highlightStars(count) {
     });
 }
 
+// Bind triggers
+document.querySelectorAll('.rate-trigger').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const vid = btn.dataset.videoId;
+        const title = btn.dataset.title;
+        const score = parseInt(btn.dataset.currentScore);
+        openRatingModal(vid, title, score);
+    });
+});
+
 document.querySelectorAll('.star-input').forEach(star => {
     star.addEventListener('click', () => {
         const val = parseInt(star.dataset.value);
@@ -150,6 +166,15 @@ document.querySelectorAll('.star-input').forEach(star => {
 
 document.getElementById('starRatingInput').addEventListener('mouseleave', () => {
     highlightStars(parseInt(document.getElementById('ratingScore').value));
+});
+
+// Form Validation
+document.getElementById('ratingForm').addEventListener('submit', (e) => {
+    const score = parseInt(document.getElementById('ratingScore').value);
+    if (score < 1) {
+        e.preventDefault();
+        alert('Please select a star rating between 1 and 5.');
+    }
 });
 
 // Close modal on backdrop click

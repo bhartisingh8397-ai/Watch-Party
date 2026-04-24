@@ -533,9 +533,17 @@ def api_verify_otp():
 def index():
     user = get_current_user()
 
+    # Fetch real user testimonials (ratings with reviews, score >= 4)
+    testimonials = (
+        Rating.query.filter(Rating.review != "", Rating.score >= 4)
+        .order_by(Rating.created_at.desc())
+        .limit(6)
+        .all()
+    )
+
     if not user:
         # Show landing page for non-logged-in users
-        return render_template("landing.html", user=None)
+        return render_template("landing.html", user=None, testimonials=testimonials)
 
     # Show dashboard for logged-in users
     rooms = Room.query.all()
@@ -647,6 +655,7 @@ def admin_login():
 
         if email == ADMIN_EMAIL and verify_admin_password(password):
             clear_failed_attempts("admin_login", rate_limit_subject)
+            session.clear()  # Clear any existing user session
             session["is_admin"] = True
             session.permanent = True
             return redirect(url_for("admin"))
@@ -1057,11 +1066,17 @@ def recommendations():
         if v.id not in rec_video_ids:
             rec_videos.append(v)
 
+    # Get user's ratings for highlighting
+    user_ratings = {}
+    if user:
+        for r in Rating.query.filter_by(user_id=user.id).all():
+            user_ratings[r.video_id] = r.score
+
     return render_template(
         "movies.html",
         videos=rec_videos[:12],
         user=user,
-        user_ratings={},
+        user_ratings=user_ratings,
         is_recommendations=True,
     )
 
@@ -1446,9 +1461,21 @@ ROOM_PLAYBACK_STATE = {}
 
 
 def broadcast_user_list(room):
-    users = list(ROOM_USERS.get(room, set()))
-    count = len(users)
-    emit("user_count", {"count": count, "users": users}, room=room)
+    usernames = list(ROOM_USERS.get(room, set()))
+    user_details = []
+    for uname in usernames:
+        u = User.query.filter_by(username=uname).first()
+        if u:
+            user_details.append({
+                "username": u.username,
+                "avatar": u.avatar_filename
+            })
+        else:
+            user_details.append({
+                "username": uname,
+                "avatar": None
+            })
+    emit("user_count", {"count": len(user_details), "users": user_details}, room=room)
 
 
 def get_room_playback_snapshot(room):
@@ -1520,7 +1547,12 @@ def on_chat_message(data):
     room = data["room"]
     username = data["username"]
     message = data["message"]
-    emit("message", {"username": username, "msg": message}, room=room)
+    
+    # Fetch avatar for chat
+    user = User.query.filter_by(username=username).first()
+    avatar = user.avatar_filename if user else None
+    
+    emit("message", {"username": username, "msg": message, "avatar": avatar}, room=room)
 
 
 # Typing Indicator
@@ -1585,3 +1617,6 @@ def on_reaction(data):
 
 if __name__ == "__main__":
     socketio.run(app, debug=True)
+
+
+

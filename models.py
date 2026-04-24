@@ -19,6 +19,11 @@ class User(db.Model):
     theme = db.Column(db.String(20), nullable=True, default="dark")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    def get_avatar_url(self):
+        if self.avatar_filename:
+            return f"/static/uploads/{self.avatar_filename}"
+        return None
+
     # Relationships
     ratings = db.relationship("Rating", backref="user", lazy=True)
     watch_history = db.relationship("WatchHistory", backref="user", lazy=True)
